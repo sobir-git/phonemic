@@ -1,8 +1,8 @@
 // Run the embedded interaction code with fake browser/audio boundaries.
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
+const {execFileSync} = require('node:child_process');
 const vm = require('node:vm');
-const source = fs.readFileSync('lib/webmic.py', 'utf8').split('<script>')[1].split('</script>')[0];
+const source = execFileSync('python3', ['-c', "import ast,pathlib; tree=ast.parse(pathlib.Path('lib/webmic.py').read_text()); print(next(ast.literal_eval(n.value) for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='PAGE' for t in n.targets)))"], {encoding:'utf8'}).split('<script>')[1].split('</script>')[0].replace("remoteAction({action:'list'});\n\n", '');
 function browser() {
   const elements = new Map();
   const context = vm.createContext({
@@ -11,19 +11,23 @@ function browser() {
         if (!elements.has(id)) elements.set(id, {
           value: id === 'q' ? '24000:1' : '', checked: false, style: {},
           classList: {add(){}, remove(){}, toggle(){}},
-          addEventListener(){}, getContext(){return {};},
+          handlers:{}, addEventListener(type,fn){this.handlers[type]=fn;}, getContext(){return {};},
         });
         return elements.get(id);
       },
-      addEventListener(){},
+      addEventListener(){}, querySelectorAll(){return [
+        {addEventListener(){},dataset:{mod:'ctrl'},setAttribute(k,v){this[k]=v}},
+        {addEventListener(){},dataset:{mod:'alt'},setAttribute(k,v){this[k]=v}},
+        {addEventListener(){},dataset:{key:'enter'},setAttribute(){}},
+      ];},
     },
     navigator: {}, localStorage: {getItem(){return null;}},
-    requestAnimationFrame(){}, setTimeout, clearTimeout,
+    requestAnimationFrame(){}, setTimeout, clearTimeout, setInterval(){},
     performance, console,
   });
   vm.runInContext(source, context);
   const run = code => vm.runInContext(code, context);
-  run(`ready=true; ws={readyState:1,close(){}}; pressed=true; micOn=async()=>true;
+  run(`var actualMicOn=micOn; ready=true; ws={readyState:1,close(){}}; pressed=true; micOn=async()=>true;
     var commands=[]; dictationCommand=async action=>{commands.push(action)};`);
   return run;
 }
@@ -121,5 +125,62 @@ function browser() {
     await pending;
     assert.equal(run('talking'), true);
   }
-  console.log('8 phone interaction checks passed');
+  {
+    const run = browser();
+    run(`var actions=[]; navigator.vibrate=()=>actions.push('vibrate');
+      micOn=async()=>{actions.push('mic');return true};
+      talk.handlers.pointerdown({preventDefault(){}});`);
+    assert.equal(run('actions.join(",")'), 'vibrate,mic');
+    await new Promise(setImmediate);
+  }
+  {
+    const run = browser();
+    run(`ready=false; dictation.checked=true; var connected, requested=false, packets=[];
+      navigator.mediaDevices={getUserMedia(){requested=true;return Promise.resolve({getTracks(){return [{stop(){}}]}})}};
+      var URL={createObjectURL(){return 'blob:test'},revokeObjectURL(){}};
+      var Blob=function(){};
+      var AudioContext=class {
+        constructor(){this.sampleRate=24000;this.audioWorklet={addModule:async()=>{}}}
+        async suspend(){} async resume(){} close(){}
+        createMediaStreamSource(){return {connect(){},disconnect(){}}}
+      };
+      var AudioWorkletNode=class {constructor(){this.port={}} connect(){}};
+      micOn=actualMicOn;
+      connect=()=>new Promise(r=>connected=()=>{ready=true;ws={readyState:1,send(b){packets.push(Array.from(new Int16Array(b)))}};r(true)});`);
+    const pending=run('begin()');
+    assert.equal(run('requested'), true);
+    await new Promise(setImmediate);
+    assert.equal(run('capturing'), true);
+    run('node.port.onmessage({data:{b:new Int16Array([123,456]).buffer,p:0.1}})');
+    assert.equal(run('pendN'), 2);
+    assert.equal(run('packets.length'), 0);
+    run('pressed=false; end()');
+    assert.equal(run('capturing'), false);
+    assert.equal(run('pendN'), 2);
+    run('connected()');
+    await pending;
+    await new Promise(setImmediate);
+    assert.equal(run('packets[0].join(",")'), '123,456');
+    assert.equal(run('commands.join(",")'), 'start,stop');
+    assert.equal(run('talking'), false);
+  }
+  {
+    const run=browser();
+    run(`paneSelect.value='w7:p3'; var remoteCommands=[];
+      herdrCommand=async c=>{remoteCommands.push(c);return {pane:c.pane}};
+      remoteButtons[0].onclick();remoteButtons[1].onclick();remoteButtons[2].onclick();`);
+    await new Promise(setImmediate);
+    assert.equal(run('remoteCommands[0].pane'), 'w7:p3');
+    assert.equal(run('remoteCommands[0].modifiers.join(",")'), 'ctrl,alt');
+    assert.equal(run('modifiers.size'), 0);
+    run('talking=true;paintRemote()');
+    assert.equal(run('paneSelect.disabled && remoteButtons.every(b=>b.disabled)'), true);
+  }
+  {
+    const run=browser();
+    assert.equal(run("paneDetail({workspace:'phonemic',agent:'codex',title:'⠙ phonemic | Working'})"),'codex');
+    assert.equal(run("paneDetail({workspace:'phonemic',agent:'codex',title:'Ready'})"),'codex');
+    assert.equal(run("paneDetail({workspace:'phonemic',agent:'codex',title:'chatbot | Idle'})"),'codex · chatbot');
+  }
+  console.log('12 phone interaction checks passed');
 })().catch(error => {console.error(error); process.exitCode=1;});

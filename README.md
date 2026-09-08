@@ -215,8 +215,7 @@ MIT
 
 With the sibling `voice-dictation` project's updated daemon running, open the
 phone's settings and enable **Trigger laptop dictation**. Focus the text field
-on your laptop, then hold the phone button, speak when it says **Dictating to
-laptop**, and release. The daemon transcribes and uses its configured text output
+on your laptop, then touch the phone button, speak when it says **Recording**, and release. The daemon transcribes and uses its configured text output
 method. Hands-free mode uses a tap to start and another tap to submit.
 
 The phone connection controls recording through the daemon's private local
@@ -238,3 +237,32 @@ Integration checks use fake audio and temporary sockets:
 python3 -m unittest discover -s tests -v
 node tests/test_phone_ui.js
 ```
+
+Touch-down requests microphone access immediately and gives a short vibration
+where supported. Audio captured while the laptop connects is buffered locally
+for up to four seconds, then sent in order. Releasing during startup submits
+whatever was already captured. Browser permission and microphone hardware startup
+can still take time; there is no long-press recognition delay.
+
+## Herdr remote controls
+
+The custom Herdr picker has Spaces and Agents views, colored lifecycle dots,
+and a highlighted current selection. Status updates every five seconds while idle.
+Selecting a pane focuses it
+in the laptop's Herdr window. Scroll up/down moves through half a screen of
+terminal history; **Latest** returns to the bottom.
+
+The compact key strip provides Esc, Tab, arrows, Space, Backspace, Enter and
+Ctrl+C. Tap **Ctrl** or **Alt** to apply it to the next key; modifiers reset after
+that key. Keys always target the selected pane. Pane selection and keys are
+locked while recording. Dictation does not press Enter automatically.
+
+Enable **Trigger laptop dictation** in settings to dictate. Keep the Herdr window
+active on the laptop because text output still uses the dictation daemon's
+configured output method. Recording refocuses the selected Herdr pane before
+starting laptop capture.
+
+PhoneMic uses Herdr's private local socket at `~/.config/herdr/herdr.sock`.
+Set `PM_HERDR_SOCKET` in the receiver environment for another session socket.
+Terminal controls require a PhoneMic access token; its existing phone link grants
+access to these controls. No additional public endpoint or port is needed.

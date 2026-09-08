@@ -6,7 +6,8 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock, MagicMock
+from types import SimpleNamespace
 
 spec = importlib.util.spec_from_file_location('webmic', Path(__file__).parents[1] / 'lib/webmic.py')
 webmic = importlib.util.module_from_spec(spec)
@@ -80,3 +81,75 @@ class DictationTests(unittest.IsolatedAsyncioTestCase):
         await self.bridge.start()
         await self.bridge.finish(abort=True)
         self.assertEqual(self.commands[-1], {'cmd': 'abort_recording'})
+
+
+class BufferedAudioTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stop_waits_for_buffered_speech_to_play(self):
+        samples = b'\x01\x00' * (webmic.RATE // 2)
+        class Phone:
+            remote_address = None
+            transport = None
+            send = AsyncMock()
+            async def __aiter__(self):
+                for message in ('{"dictation":"start"}', samples, '{"dictation":"stop"}'):
+                    yield message
+        bridge = SimpleNamespace(start=AsyncMock(), finish=AsyncMock(), close=AsyncMock())
+        sink = MagicMock()
+        clock = SimpleNamespace(monotonic=lambda: 100.0, time=lambda: 100.0)
+        with patch.object(webmic, 'Dictation', return_value=bridge), \
+             patch.object(webmic, 'spawn_sink', return_value=sink), \
+             patch.object(webmic, 'stop_proc'), \
+             patch.object(webmic, 'report', new=AsyncMock()), \
+             patch.object(webmic, 'time', clock), \
+             patch.object(webmic.asyncio, 'sleep', new=AsyncMock()) as sleep:
+            await webmic.handler(Phone())
+        sleep.assert_awaited_once_with(0.5)
+        sink.stdin.write.assert_called_once_with(samples)
+        bridge.finish.assert_awaited_once_with(abort=False)
+
+
+class HerdrTests(unittest.IsolatedAsyncioTestCase):
+    async def test_inventory_exposes_only_picker_metadata(self):
+        remote = webmic.Herdr()
+        remote.request = AsyncMock(side_effect=[
+            {'workspaces': [{'workspace_id': 'w1', 'label': 'Project'}]},
+            {'panes': [{'workspace_id': 'w1', 'pane_id': 'w1:p1',
+                        'terminal_title_stripped': 'Agent', 'focused': True, 'agent': 'codex', 'agent_status': 'working',
+                        'agent_session': {'private': 'not needed'}}]},
+        ])
+        result = await remote.control({'action': 'list'})
+        self.assertEqual(result, {'panes': [{'id': 'w1:p1', 'workspace': 'Project',
+                                           'title': 'Agent', 'focused': True, 'workspace_id': 'w1',
+                                           'workspace_state': 'unknown', 'state': 'working', 'agent': 'codex'}]})
+
+    async def test_modifiers_and_keys_target_explicit_pane(self):
+        remote = webmic.Herdr()
+        remote.request = AsyncMock(return_value={})
+        await remote.control({'action': 'key', 'pane': 'w2:p3', 'key': 'backspace',
+                              'modifiers': ['alt', 'ctrl']})
+        remote.request.assert_awaited_once_with('pane.send_keys', {
+            'pane_id': 'w2:p3', 'keys': ['ctrl+alt+backspace']})
+
+    async def test_scroll_is_clamped_to_available_history(self):
+        remote = webmic.Herdr()
+        remote.request = AsyncMock(side_effect=[
+            {'pane': {'scroll': {'offset_from_bottom': 95, 'max_offset_from_bottom': 100,
+                                 'viewport_rows': 40}}}, {},
+        ])
+        await remote.control({'action': 'scroll', 'pane': 'w2:p3', 'direction': 'up'})
+        self.assertEqual(remote.request.await_args.args, ('pane.scroll', {
+            'pane_id': 'w2:p3', 'offset_from_bottom': 100}))
+
+    async def test_unlisted_keys_and_arbitrary_methods_never_reach_herdr(self):
+        remote = webmic.Herdr()
+        remote.request = AsyncMock()
+        for command in (
+            {'action': 'server.stop'},
+            {'action': 'key', 'key': 'some text'},
+            {'action': 'key', 'key': 'enter', 'modifiers': ['super']},
+            {'action': 'key', 'key': 'c'},
+            {'action': 'scroll', 'direction': 'sideways'},
+        ):
+            with self.assertRaises(RuntimeError):
+                await remote.control({'pane': 'w2:p3', **command})
+        remote.request.assert_not_awaited()
