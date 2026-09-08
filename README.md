@@ -210,3 +210,31 @@ tunnel and its DNS record, which it will not do for you.
 ## License
 
 MIT
+
+## Trigger laptop dictation from the phone
+
+With the sibling `voice-dictation` project's updated daemon running, open the
+phone's settings and enable **Trigger laptop dictation**. Focus the text field
+on your laptop, then hold the phone button, speak when it says **Dictating to
+laptop**, and release. The daemon transcribes and uses its configured text output
+method. Hands-free mode uses a tap to start and another tap to submit.
+
+The phone connection controls recording through the daemon's private local
+socket. Each mobile recording uses `phonemic2_src` by default, without changing
+saved desktop microphone settings. Desktop dictation must be listening; a paused
+or busy daemon reports an error on the phone. Disconnecting discards an unfinished
+mobile recording. The existing phone access link also grants this recording
+control, so keep its token private.
+
+Update the sibling daemon with `cargo build --release --locked` in its repository
+and `systemctl --user restart speech-to-text-daemon`. Deploy PhoneMic as described
+in `AGENTS.md`. No additional network port or cloud service is required.
+`STT_SOCKET_PATH` can override the default local dictation socket for testing or a
+custom installation.
+
+Integration checks use fake audio and temporary sockets:
+
+```sh
+python3 -m unittest discover -s tests -v
+node tests/test_phone_ui.js
+```

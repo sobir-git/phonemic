@@ -158,7 +158,7 @@ footer{display:flex;justify-content:center;padding:0 1.2rem clamp(5rem,14vh,9rem
 background:#20242a;color:var(--dim);font:600 1rem system-ui;
 display:flex;align-items:center;justify-content:center;text-align:center;padding:1rem;
 box-shadow:0 0 0 0 rgba(46,190,130,.4);transition:background .12s,color .12s,box-shadow .2s,transform .1s;
-touch-action:none}
+touch-action:none;-webkit-touch-callout:none}
 #talk.live{background:var(--green);color:#04210f;box-shadow:0 0 0 16px rgba(46,190,130,.11);transform:scale(1.03)}
 #talk.busy{opacity:.55}
 </style></head><body>
@@ -178,6 +178,8 @@ touch-action:none}
   </div>
   <div class=row><label for=hf>Hands-free (tap to lock on)</label>
     <input type=checkbox id=hf></div>
+  <div class=row><label for=dictation>Trigger laptop dictation</label>
+    <input type=checkbox id=dictation></div>
   <div class=key>
     <span><i style="background:#3a4048"></i>not sent</span>
     <span><i style="background:#e0a33a"></i>sent</span>
@@ -198,12 +200,14 @@ touch-action:none}
 <script>
 const $=i=>document.getElementById(i);
 const talk=$('talk'),st=$('st'),lap=$('lap'),hf=$('hf'),dis=$('dis'),q=$('q'),
-      gear=$('gear'),panel=$('panel'),vis=$('vis'),g=vis.getContext('2d');
+      gear=$('gear'),panel=$('panel'),vis=$('vis'),g=vis.getContext('2d'),dictation=$('dictation');
 let ws,ctx,node,src,stream,lock=null;
-let ready=false,talking=false,connecting=false,gen=0;
+let ready=false,talking=false,connecting=false,gen=0,pressed=false,starting=false;
+let dictationWait=null;
 
 try{ const v=localStorage.getItem('pm.q'); if(v) q.value=v; }catch(e){}
 try{ hf.checked = localStorage.getItem('pm.hf')==='1'; }catch(e){}
+try{ dictation.checked = localStorage.getItem('pm.dictation')==='1'; }catch(e){}
 const quality=()=>{ const [r,pr]=q.value.split(':'); return {rate:+r, proc:pr==='1'}; };
 const say=(t,c)=>{ st.innerHTML='<span class="dot '+(c||'')+'"></span>'+t; };
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
@@ -246,8 +250,9 @@ requestAnimationFrame(draw);
 
 function paint(){
   talk.className = talking?'live':'';
+  dictation.disabled=q.disabled=hf.disabled=starting||talking;
   talk.textContent = talking ? (hf.checked?'On — tap to stop':'Talking')
-                             : (hf.checked?'Tap to talk':'Hold to talk');
+                             : (hf.checked?'Tap to ':'Hold to ')+(dictation.checked?'dictate':'talk');
   dis.style.display = ready?'':'none';
 }
 function renderLaptop(m){
@@ -258,15 +263,30 @@ function renderLaptop(m){
 
 // The socket and audio graph stay up; the microphone itself does not.
 async function connect(){
-  if(ready||connecting) return ready;
+  if(ready&&ws&&ws.readyState===1) return true;
+  if(connecting) return false;
+  if(ready){ const held=pressed; teardown(); pressed=held; }
   connecting=true; talk.classList.add('busy'); say('Connecting…');
   const Q=quality();
   ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'+location.search);
+  const socket=ws;
   ws.binaryType='arraybuffer';
-  ws.onmessage=e=>{ try{ const m=JSON.parse(e.data); renderLaptop(m); confirmRx(m.rx);}catch(_){} };
-  ws.onclose=()=>{ if(ready) teardown('Disconnected','warn'); };
-  ws.onerror=()=>say('Connection error','warn');
-  try{ await new Promise((r,j)=>{ws.onopen=r; setTimeout(()=>j(0),10000)}); }
+  ws.onmessage=e=>{ if(ws!==socket) return; try{ const m=JSON.parse(e.data);
+    if(m.type==='dictation'){
+      if(dictationWait){ const pending=dictationWait; dictationWait=null;
+        m.error?pending.reject(new Error(m.error)):pending.resolve(m); }
+      return;
+    }
+    renderLaptop(m); confirmRx(m.rx);
+  }catch(_){} };
+  ws.onclose=()=>{ if(ws===socket) teardown('Connection closed — press to reconnect','warn'); };
+  ws.onerror=()=>{ if(ws===socket) say('Connection error','warn'); };
+  try{ await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{socket.close();reject(new Error('Connection timed out'))},10000);
+    socket.onopen=()=>{clearTimeout(timer);resolve()};
+    socket.addEventListener('close',()=>{clearTimeout(timer);reject(new Error('Connection closed'))},{once:true});
+  });
+  if(ws!==socket||socket.readyState!==1) throw new Error('Connection closed'); }
   catch(e){ connecting=false; talk.classList.remove('busy'); say('Could not reach the computer','warn'); return false; }
   ctx=new AudioContext({sampleRate:Q.rate,latencyHint:'interactive'});
   ws.send(JSON.stringify({rate:ctx.sampleRate,proc:Q.proc}));
@@ -302,10 +322,11 @@ let pend=[],pendN=0,CHUNK=480;
 // phone is not recording and the radio/mic draw nothing.
 async function micOn(){
   const Q=quality(), my=++gen;
-  stream=await navigator.mediaDevices.getUserMedia({audio:{
+  const acquired=await navigator.mediaDevices.getUserMedia({audio:{
     echoCancellation:Q.proc,noiseSuppression:Q.proc,autoGainControl:Q.proc,
     channelCount:1,sampleRate:Q.rate}});
-  if(my!==gen){ stream.getTracks().forEach(t=>t.stop()); stream=null; return false; }
+  if(my!==gen){ acquired.getTracks().forEach(t=>t.stop()); return false; }
+  stream=acquired;
   src=ctx.createMediaStreamSource(stream); src.connect(node);
   await ctx.resume();
   return true;
@@ -318,35 +339,83 @@ function micOff(){
   pend=[]; pendN=0;
 }
 async function begin(){
-  if(talking) return;
-  if(!ready){ if(!await connect()) return; }
-  talking=true; paint(); say('Opening microphone…');
+  if(talking||starting) return;
+  starting=true; paint();
+  let remoteStarted=false;
   try{
-    if(!await micOn()){ talking=false; paint(); say('Ready — the mic is off'); return; }
-    if(talking) say('Live','live');
+    if((!ready||!ws||ws.readyState!==1) && !await connect()) return;
+    if(!pressed) return;
+    say(dictation.checked?'Opening microphones…':'Opening microphone…');
+    const remote=dictation.checked
+      ? dictationCommand('start').then(()=>{remoteStarted=true})
+      : Promise.resolve();
+    const [phoneResult,remoteResult]=await Promise.allSettled([micOn(),remote]);
+    if(remoteResult.status==='rejected') throw remoteResult.reason;
+    if(phoneResult.status==='rejected') throw phoneResult.reason;
+    if(!phoneResult.value||!pressed){
+      micOff();
+      if(remoteStarted) await dictationCommand('abort');
+      say('Ready — the mic is off');
+      return;
+    }
+    talking=true; say(dictation.checked?'Dictating to laptop':'Live','live');
   }catch(e){
-    talking=false; paint(); say('Microphone blocked ('+e.name+')','warn');
-  }
+    micOff();
+    if(remoteStarted) await dictationCommand('abort').catch(()=>{});
+    say(e.message||'Could not start recording','warn');
+  }finally{ starting=false; paint(); }
+}
+function dictationCommand(action){
+  return new Promise((resolve,reject)=>{
+    if(!ws||ws.readyState!==1){ reject(new Error('Computer disconnected')); return; }
+    if(dictationWait){ reject(new Error('Dictation command already pending')); return; }
+    const timer=setTimeout(()=>{ dictationWait=null; reject(new Error('Dictation timed out')); ws.close(); },7000);
+    dictationWait={resolve:m=>{clearTimeout(timer);resolve(m)},reject:e=>{clearTimeout(timer);reject(e)}};
+    ws.send(JSON.stringify({dictation:action}));
+  });
 }
 function end(){
+  if(starting){ micOff(); return; }
   if(!talking) return;
+  if(pendN&&ws&&ws.readyState===1){
+    const out=new Int16Array(pendN); let offset=0;
+    for(const a of pend){out.set(a,offset);offset+=a.length;}
+    sent+=out.byteLength; ws.send(out.buffer);
+  }
   talking=false; micOff(); paint(); say('Ready — the mic is off');
+  if(dictation.checked){
+    starting=true; paint(); say('Sending to laptop dictation…');
+    dictationCommand('stop').then(()=>say('Sent to laptop for transcription'))
+      .catch(e=>say(e.message,'warn')).finally(()=>{starting=false;paint();});
+  }
 }
 function teardown(msg,c){
-  ready=false; talking=false; micOff();
-  try{ws&&ws.close()}catch(e){} try{ctx&&ctx.close()}catch(e){}
+  pressed=false; ready=false; connecting=false; talking=false; micOff();
+  if(dictationWait){ dictationWait.reject(new Error("Computer disconnected")); dictationWait=null; }
+  const oldSocket=ws; ws=null;
+  try{oldSocket&&oldSocket.close()}catch(e){} try{ctx&&ctx.close()}catch(e){}
   ctx=null; node=null;
   try{lock&&lock.release()}catch(e){} lock=null;
   lap.textContent=''; say(msg||'Disconnected',c); paint();
 }
 
 talk.addEventListener('pointerdown',e=>{ e.preventDefault();
+  if(starting) return;
+  try{navigator.vibrate&&navigator.vibrate(15)}catch(_){}
+  pressed=hf.checked?!talking:true;
   if(hf.checked){ talking?end():begin(); } else begin(); });
 ['pointerup','pointercancel','pointerleave'].forEach(ev=>
-  talk.addEventListener(ev,e=>{ e.preventDefault(); if(!hf.checked) end(); }));
+  talk.addEventListener(ev,e=>{ e.preventDefault(); if(!hf.checked){ pressed=false; end(); } }));
+// Suppress the browser's delayed long-press menu and its haptic feedback.
+talk.addEventListener('touchstart',e=>e.preventDefault(),{passive:false});
 talk.addEventListener('contextmenu',e=>e.preventDefault());
 hf.onchange=()=>{ try{localStorage.setItem('pm.hf',hf.checked?'1':'0')}catch(e){}
-  if(!hf.checked) end(); paint(); };
+  if(!hf.checked){ pressed=false; end(); } paint(); };
+dictation.onchange=()=>{
+  if(ready||starting) teardown('Mode changed — ready to reconnect');
+  try{localStorage.setItem('pm.dictation',dictation.checked?'1':'0')}catch(e){}
+  paint();
+};
 q.onchange=()=>{ try{localStorage.setItem('pm.q',q.value)}catch(e){}
   if(ready) teardown('Quality changed — hold to reconnect'); };
 dis.onclick=()=>teardown('Disconnected');
@@ -444,6 +513,66 @@ def spawn_sink(rate):
          f"--latency-msec={LATENCY}", "--property=application.name=phonemic-web"],
         stdin=subprocess.PIPE)
 
+class Dictation:
+    """One local control connection owns one phone recording."""
+    def __init__(self):
+        self.reader = self.writer = None
+
+    async def receive(self, expected):
+        while True:
+            line = await self.reader.readline()
+            if not line:
+                raise RuntimeError("Laptop dictation disconnected")
+            message = json.loads(line)
+            if message.get("type") == "error":
+                raise RuntimeError(message.get("message", "Laptop dictation failed"))
+            if message.get("type") == expected:
+                return message
+
+    async def command(self, command):
+        self.writer.write((json.dumps(command) + "\n").encode())
+        await self.writer.drain()
+
+    async def start(self):
+        if self.writer:
+            raise RuntimeError("Dictation is already recording")
+        runtime = os.environ.get("XDG_RUNTIME_DIR", f"/tmp/speech-to-text-{os.getuid()}")
+        path = os.environ.get("STT_SOCKET_PATH", f"{runtime}/speech-to-text/daemon.sock")
+        try:
+            async with asyncio.timeout(5):
+                self.reader, self.writer = await asyncio.open_unix_connection(path)
+                await self.receive("state")
+                await self.command({"cmd": "start_recording", "pipewire_node": SRC})
+                await self.receive("recording_started")
+                # Wait until the capture process produces samples before the phone talks.
+                await self.receive("audio_level")
+        except Exception:
+            await self.close()
+            raise
+
+    async def finish(self, abort=False):
+        if not self.writer:
+            raise RuntimeError("No mobile dictation is recording")
+        try:
+            async with asyncio.timeout(3):
+                if not abort:
+                    # Allow the virtual microphone's short playback buffer to drain.
+                    await asyncio.sleep(max(0.15, LATENCY / 1000 * 2))
+                await self.command({"cmd": "abort_recording" if abort else "stop_recording"})
+                await self.receive("recording_stopped")
+        finally:
+            await self.close()
+
+    async def close(self):
+        if self.writer:
+            self.writer.close()
+            try:
+                await self.writer.wait_closed()
+            except OSError:
+                pass
+        self.reader = self.writer = None
+
+
 async def handler(ws):
     peer = ws.remote_address[0] if ws.remote_address else "?"
     # Small frames arrive continuously; Nagle would batch them into extra delay.
@@ -457,6 +586,7 @@ async def handler(ws):
     print(f"phone connected: {peer}", flush=True)
     ff = spawn_sink(RATE)
     rate = RATE
+    dictation = Dictation()
     state = {"n": 0}
     task = asyncio.create_task(report(ws, state))
     t0 = time.time()
@@ -467,6 +597,22 @@ async def handler(ws):
                 try:
                     cfg = json.loads(msg)
                 except Exception:
+                    continue
+                if not isinstance(cfg, dict):
+                    continue
+                if "dictation" in cfg:
+                    try:
+                        action = cfg["dictation"]
+                        if action == "start":
+                            await dictation.start()
+                        elif action in ("stop", "abort"):
+                            await dictation.finish(abort=action == "abort")
+                        else:
+                            raise RuntimeError("Unknown dictation action")
+                        await ws.send(json.dumps({"type": "dictation", "action": action}))
+                    except Exception as error:
+                        message = str(error) if isinstance(error, RuntimeError) else "Laptop dictation unavailable; check that its updated daemon is running"
+                        await ws.send(json.dumps({"type": "dictation", "error": message}))
                     continue
                 r = int(cfg.get("rate", rate))
                 if r != rate and 8000 <= r <= 48000:
@@ -484,6 +630,7 @@ async def handler(ws):
         print("stream ended:", e, flush=True)
     finally:
         task.cancel()
+        await dictation.close()
         stop_proc(ff)
         print(f"phone disconnected after {time.time()-t0:.0f}s "
               f"({state['n']/2/rate:.1f}s of audio)", flush=True)
@@ -494,7 +641,7 @@ async def main():
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(CERT, KEY)
     async with serve(handler, BIND, PORT, ssl=ctx, process_request=process_request,
-                     max_size=None, ping_interval=10, ping_timeout=10):
+                     max_size=None, ping_interval=20, ping_timeout=60):
         print(f"listening on {BIND}:{PORT} ({'https' if ctx else 'http'}) "
               f"sink={SINK} rate={RATE} latency={LATENCY}ms", flush=True)
         await asyncio.get_running_loop().create_future()
