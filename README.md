@@ -45,17 +45,28 @@ phonemic test 1      # live level meter
 
 ## The phone page
 
-- **Hold to talk.** Nothing leaves the phone unless you are holding the button.
-  Tick *Hands-free* to make it a tap-on/tap-off toggle instead.
-- **Waveform** showing what happened to each slice of audio:
-  grey = captured but not sent, amber = sent, green = the laptop confirmed it
-  arrived. The green is driven by a byte count the server reports back, so it
-  reflects reality rather than optimism.
-- **Quality**: Studio (48 kHz, raw), Voice (24 kHz, browser noise suppression
-  and gain control), Low data (16 kHz). Chosen on the phone, applied before
-  anything is transmitted.
-- **Laptop status**: which application on the computer is currently using the
+Deliberately sparse: settings at the top behind a gear, the waveform in the
+middle, and the button at the bottom where your thumb already is.
+
+- **Hold to talk.** The microphone is *acquired on press and released on
+  release* — not muted, actually closed, so the phone is not recording and the
+  OS microphone indicator goes out. That is the point of the button, and it is
+  why the page costs almost nothing to leave open.
+  The trade is a short acquisition delay on each press, so the first syllable
+  can clip. Tick **Hands-free** in settings to keep the microphone open and
+  toggle with a tap instead.
+- **Waveform**, about 8 seconds wide with a gridline per second. Colour records
+  what happened to each slice: grey = captured but not sent, amber = sent,
+  green = the computer confirmed it arrived. Green is driven by a byte count
+  the server reports back, so it reflects what actually landed rather than what
+  the phone hoped.
+- **Quality** (settings): Studio 48 kHz raw, Voice 24 kHz, or Low data 16 kHz.
+  The lower presets also enable the browser's own noise suppression and gain
+  control. Applied on the phone, before anything is transmitted.
+- **Status**: which application on the computer is currently using the
   microphone, or that none has selected it yet.
+
+It is a PWA — *Add to home screen* gives it an icon and its own window.
 
 ## Commands
 

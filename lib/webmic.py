@@ -113,136 +113,164 @@ PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=apple-mobile-web-app-status-bar-style content=black>
 <link rel=apple-touch-icon href="/apple-touch-icon.png">
 <style>
-:root{color-scheme:dark}
+:root{color-scheme:dark;--bg:#111316;--fg:#e8eaed;--dim:#8b9098;--line:#22262c;
+--panel:#171a1e;--green:#2ebe82;--amber:#e0a33a;--grey:#3a4048}
 *{box-sizing:border-box}
-body{margin:0;min-height:100dvh;display:flex;flex-direction:column;align-items:center;
-justify-content:center;gap:1.3rem;padding:1.5rem;background:#111316;color:#e8eaed;
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);display:flex;flex-direction:column;
 font:16px/1.5 system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:transparent;
--webkit-user-select:none;user-select:none;overscroll-behavior:none}
-h1{margin:0;font-size:1.1rem;font-weight:600;letter-spacing:.02em}
-#talk{width:min(62vw,220px);aspect-ratio:1;border-radius:50%;border:0;
-background:#20242a;color:#8b9098;font:600 1.05rem system-ui;display:flex;
-align-items:center;justify-content:center;text-align:center;padding:1rem;
-box-shadow:0 0 0 0 rgba(46,190,130,.45);transition:background .12s,color .12s,box-shadow .18s;
-touch-action:none}
-#talk.live{background:#2ebe82;color:#04210f;box-shadow:0 0 0 14px rgba(46,190,130,.12)}
-#talk.busy{opacity:.6}
-#vis{width:min(88vw,340px);height:66px;background:#171a1e;border-radius:10px}
-.key{display:flex;gap:.9rem;font-size:.72rem;opacity:.65;flex-wrap:wrap;justify-content:center}
-.key span{display:flex;align-items:center;gap:.32rem}
-.key i{width:.6rem;height:.6rem;border-radius:2px;display:inline-block}
-.s{font-size:.88rem;text-align:center;max-width:23rem}
-#st{opacity:.85}#lap{opacity:.55;font-size:.8rem;min-height:1.2em}
+-webkit-user-select:none;user-select:none;overscroll-behavior:none;
+padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+
+/* top bar + settings */
+header{display:flex;align-items:center;justify-content:space-between;
+padding:.85rem 1.1rem;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:.95rem;font-weight:600;letter-spacing:.03em}
+#gear{background:none;border:0;color:var(--dim);font-size:1.15rem;padding:.3rem .4rem;line-height:1}
+#gear.open{color:var(--fg)}
+#panel[hidden]{display:none}
+#panel{border-bottom:1px solid var(--line);background:var(--panel);
+padding:.9rem 1.1rem;display:flex;flex-direction:column;gap:.85rem;font-size:.85rem}
+.row{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.row label{color:var(--dim)}
+select{background:#20242a;color:var(--fg);border:1px solid #2b3037;border-radius:8px;
+padding:.4rem .55rem;font:inherit;font-size:.85rem}
+input[type=checkbox]{width:1.15rem;height:1.15rem;accent-color:var(--green)}
+.key{display:flex;gap:.9rem;flex-wrap:wrap;color:var(--dim);font-size:.72rem}
+.key span{display:flex;align-items:center;gap:.3rem}
+.key i{width:.6rem;height:.6rem;border-radius:2px}
+#dis{background:none;border:1px solid #2b3037;color:var(--dim);border-radius:8px;
+padding:.45rem;font:inherit;font-size:.8rem}
+
+/* middle: waveform + one line of status */
+main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+gap:1rem;padding:1.2rem;min-height:0}
+#vis{width:100%;max-width:420px;height:88px;background:var(--panel);border-radius:12px}
+#st{font-size:.85rem;color:var(--dim);text-align:center;min-height:1.3em}
+#lap{font-size:.75rem;color:#6b7079;text-align:center;min-height:1.1em;max-width:24rem}
 .dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;
 background:#555;margin-right:.4rem;vertical-align:middle}
-.dot.live{background:#2ebe82}.dot.warn{background:#e0a33a}
-label{display:flex;align-items:center;gap:.5rem;font-size:.85rem;opacity:.75}
-.row{display:flex;align-items:center;gap:.6rem;font-size:.85rem;opacity:.8}
-select{background:#20242a;color:#e8eaed;border:1px solid #2b3037;border-radius:8px;
-padding:.45rem .6rem;font:inherit;font-size:.85rem}
-input[type=checkbox]{width:1.1rem;height:1.1rem;accent-color:#2ebe82}
-#dis{background:none;border:0;color:#8b9098;font-size:.8rem;text-decoration:underline;
-padding:.4rem;min-width:0;width:auto;aspect-ratio:auto;border-radius:0;box-shadow:none}
-</style></head><body>
-<h1>PhoneMic</h1>
-<button id=talk>Hold to talk</button>
-<canvas id=vis width=680 height=132></canvas>
-<div class=key><span><i style="background:#3a4048"></i>not sent</span>
-<span><i style="background:#e0a33a"></i>sent</span>
-<span><i style="background:#2ebe82"></i>received by laptop</span></div>
-<div class=s id=st><span class="dot" id=d></span>Ready</div>
-<div class=row>
-  <label for=q>Quality</label>
-  <select id=q>
-    <option value="48000:0">Studio · 48 kHz raw</option>
-    <option value="24000:1" selected>Voice · 24 kHz, cleaned up</option>
-    <option value="16000:1">Low data · 16 kHz</option>
-  </select>
-</div>
-<label><input type=checkbox id=hf> Hands-free (tap to lock on)</label>
-<div class=s id=lap></div>
-<button id=dis hidden>disconnect microphone</button>
-<script>
-const talk=document.getElementById('talk'),st=document.getElementById('st'),
-      lap=document.getElementById('lap'),hf=document.getElementById('hf'),
-      dis=document.getElementById('dis'),q=document.getElementById('q');
-// Quality is applied on the phone before anything is transmitted: a lower rate
-// means less data over the air, and "cleaned up" enables the browser's own
-// noise suppression / gain control instead of sending raw mic.
-try{ const v=localStorage.getItem('pm.q'); if(v) q.value=v; }catch(e){}
-const quality=()=>{ const [r,pr]=q.value.split(':'); return {rate:+r, proc:pr==='1'}; };
-let ws,ctx,node,stream,lock=null;
-let ready=false, talking=false, connecting=false;
+.dot.live{background:var(--green)}.dot.warn{background:var(--amber)}
 
-// --- waveform -------------------------------------------------------------
-// Every frame of captured audio becomes one bar. Colour records its fate:
-// grey = captured but not transmitted, amber = sent, green = the laptop
-// confirmed it arrived (matched against the byte count the server reports).
-const vis=document.getElementById('vis'), g=vis.getContext('2d');
-const BARS=110; const hist=[]; let sent=0;
-let pend=[], pendN=0, CHUNK=480;
+/* bottom: the button */
+footer{display:flex;justify-content:center;padding:0 1.2rem 2.6rem}
+#talk{width:min(56vw,180px);aspect-ratio:1;border-radius:50%;border:0;
+background:#20242a;color:var(--dim);font:600 1rem system-ui;
+display:flex;align-items:center;justify-content:center;text-align:center;padding:1rem;
+box-shadow:0 0 0 0 rgba(46,190,130,.4);transition:background .12s,color .12s,box-shadow .2s,transform .1s;
+touch-action:none}
+#talk.live{background:var(--green);color:#04210f;box-shadow:0 0 0 16px rgba(46,190,130,.11);transform:scale(1.03)}
+#talk.busy{opacity:.55}
+</style></head><body>
+
+<header>
+  <h1>PhoneMic</h1>
+  <button id=gear aria-label=Settings>&#9881;</button>
+</header>
+
+<div id=panel hidden>
+  <div class=row><label for=q>Quality</label>
+    <select id=q>
+      <option value="48000:0">Studio · 48 kHz raw</option>
+      <option value="24000:1" selected>Voice · 24 kHz</option>
+      <option value="16000:1">Low data · 16 kHz</option>
+    </select>
+  </div>
+  <div class=row><label for=hf>Hands-free (tap to lock on)</label>
+    <input type=checkbox id=hf></div>
+  <div class=key>
+    <span><i style="background:#3a4048"></i>not sent</span>
+    <span><i style="background:#e0a33a"></i>sent</span>
+    <span><i style="background:#2ebe82"></i>received</span>
+    <span>· 8s window, 1s per line</span>
+  </div>
+  <button id=dis>Disconnect</button>
+</div>
+
+<main>
+  <canvas id=vis width=840 height=176></canvas>
+  <div id=st><span class="dot" id=d></span>Ready</div>
+  <div id=lap></div>
+</main>
+
+<footer><button id=talk>Hold to talk</button></footer>
+
+<script>
+const $=i=>document.getElementById(i);
+const talk=$('talk'),st=$('st'),lap=$('lap'),hf=$('hf'),dis=$('dis'),q=$('q'),
+      gear=$('gear'),panel=$('panel'),vis=$('vis'),g=vis.getContext('2d');
+let ws,ctx,node,src,stream,lock=null;
+let ready=false,talking=false,connecting=false,gen=0;
+
+try{ const v=localStorage.getItem('pm.q'); if(v) q.value=v; }catch(e){}
+try{ hf.checked = localStorage.getItem('pm.hf')==='1'; }catch(e){}
+const quality=()=>{ const [r,pr]=q.value.split(':'); return {rate:+r, proc:pr==='1'}; };
+const say=(t,c)=>{ st.innerHTML='<span class="dot '+(c||'')+'"></span>'+t; };
+if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+
+gear.onclick=()=>{ panel.hidden=!panel.hidden; gear.classList.toggle('open',!panel.hidden); };
+
+// ---- waveform: one bar per BAR_MS, not per render quantum (~2.7ms) ----
+const BARS=140, BAR_MS=60, PER_SEC=Math.round(1000/BAR_MS);
+const hist=[]; let sent=0, accPeak=0, accSent=false, accT=0;
 function push(peak,sending){
-  hist.push({p:peak, s:sending?1:0, at:sent});
+  const now=performance.now();
+  if(!accT) accT=now;
+  if(peak>accPeak) accPeak=peak;
+  if(sending) accSent=true;
+  if(now-accT < BAR_MS) return;
+  hist.push({p:accPeak,s:accSent?1:0,at:sent});
   while(hist.length>BARS) hist.shift();
+  accPeak=0; accSent=false; accT=now;
 }
-function confirm(rx){
+function confirmRx(rx){
   if(typeof rx!=='number') return;
   for(const h of hist) if(h.s===1 && h.at<=rx) h.s=2;
 }
 function draw(){
-  const W=vis.width, H=vis.height, n=BARS, bw=W/n;
-  g.clearRect(0,0,W,H);
+  if(!talking) push(0,false);        // keep the timeline scrolling when idle
+  const W=vis.width,H=vis.height,bw=W/BARS;
   g.fillStyle='#171a1e'; g.fillRect(0,0,W,H);
+  g.fillStyle='#1f2429';
+  for(let k=PER_SEC;k<BARS;k+=PER_SEC) g.fillRect(W-k*bw,0,1,H);
   g.fillStyle='#22262c'; g.fillRect(0,H/2-1,W,2);
   for(let i=0;i<hist.length;i++){
-    const h=hist[i], x=W-(hist.length-i)*bw;
-    const amp=Math.max(2, Math.min(1,h.p*1.5)*(H*0.92));
-    g.fillStyle = h.s===2?'#2ebe82' : h.s===1?'#e0a33a' : '#3a4048';
-    g.fillRect(x+bw*0.18, (H-amp)/2, Math.max(1,bw*0.64), amp);
+    const h=hist[i],x=W-(hist.length-i)*bw;
+    const amp=Math.max(2,Math.min(1,h.p*1.5)*(H*0.9));
+    g.fillStyle=h.s===2?'#2ebe82':h.s===1?'#e0a33a':'#3a4048';
+    g.fillRect(x+bw*0.15,(H-amp)/2,Math.max(1,bw*0.7),amp);
   }
   requestAnimationFrame(draw);
 }
 requestAnimationFrame(draw);
-const say=(t,c)=>{st.innerHTML='<span class="dot '+(c||'')+'"></span>'+t};
-if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
 function paint(){
   talk.className = talking?'live':'';
-  talk.textContent = talking ? (hf.checked?'On — tap to stop':'Talking…')
+  talk.textContent = talking ? (hf.checked?'On — tap to stop':'Talking')
                              : (hf.checked?'Tap to talk':'Hold to talk');
-  dis.hidden = !ready;
+  dis.style.display = ready?'':'none';
 }
 function renderLaptop(m){
-  if(m.mic===null){ lap.textContent='Laptop: virtual microphone missing'; return; }
-  lap.textContent = (m.apps&&m.apps.length)
-    ? 'Laptop is using this mic in: '+m.apps.join(', ')
-    : 'Laptop connected. No app has selected "'+m.src+'" yet.';
+  if(m.mic===null){ lap.textContent='Computer: virtual microphone missing'; return; }
+  lap.textContent=(m.apps&&m.apps.length)?'In use by: '+m.apps.join(', ')
+                                         :'Connected. No app has selected it yet.';
 }
-// Connect once and stay connected: re-running getUserMedia on every press
-// would clip the first word off everything you say.
+
+// The socket and audio graph stay up; the microphone itself does not.
 async function connect(){
   if(ready||connecting) return ready;
   connecting=true; talk.classList.add('busy'); say('Connecting…');
   const Q=quality();
-  try{
-    stream=await navigator.mediaDevices.getUserMedia({audio:{
-      echoCancellation:Q.proc, noiseSuppression:Q.proc, autoGainControl:Q.proc,
-      channelCount:1, sampleRate:Q.rate}});
-  }catch(e){ connecting=false; talk.classList.remove('busy');
-    say('Microphone blocked ('+e.name+'). Allow it in site settings.','warn'); return false; }
   ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'+location.search);
   ws.binaryType='arraybuffer';
-  ws.onmessage=e=>{ try{ const m=JSON.parse(e.data); renderLaptop(m); confirm(m.rx); }catch(_){} };
-  ws.onclose=()=>{ if(ready) teardown('Disconnected from the laptop','warn'); };
+  ws.onmessage=e=>{ try{ const m=JSON.parse(e.data); renderLaptop(m); confirmRx(m.rx);}catch(_){} };
+  ws.onclose=()=>{ if(ready) teardown('Disconnected','warn'); };
   ws.onerror=()=>say('Connection error','warn');
-  try{ await new Promise((r,j)=>{ws.onopen=r; setTimeout(()=>j(new Error('timeout')),10000)}); }
-  catch(e){ connecting=false; talk.classList.remove('busy');
-    say('Could not reach the laptop','warn'); return false; }
-  ctx=new AudioContext({sampleRate:Q.rate, latencyHint:'interactive'});
-  // Tell the laptop the real rate the browser gave us -- it may not be the
-  // one we asked for, and a mismatch would play back at the wrong speed.
-  ws.send(JSON.stringify({rate:ctx.sampleRate, proc:Q.proc}));
-  CHUNK=Math.max(128, Math.round(ctx.sampleRate/100));   // ~10 ms per message
+  try{ await new Promise((r,j)=>{ws.onopen=r; setTimeout(()=>j(0),10000)}); }
+  catch(e){ connecting=false; talk.classList.remove('busy'); say('Could not reach the computer','warn'); return false; }
+  ctx=new AudioContext({sampleRate:Q.rate,latencyHint:'interactive'});
+  ws.send(JSON.stringify({rate:ctx.sampleRate,proc:Q.proc}));
+  CHUNK=Math.max(128,Math.round(ctx.sampleRate/100));
   const mod=`class P extends AudioWorkletProcessor{
     process(i){const c=i[0][0]; if(c){const n=new Int16Array(c.length);
       let p=0; for(let k=0;k<c.length;k++){const v=Math.max(-1,Math.min(1,c[k]));
@@ -251,13 +279,9 @@ async function connect(){
     registerProcessor('p',P)`;
   await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([mod],{type:'text/javascript'})));
   node=new AudioWorkletNode(ctx,'p');
-  // The mic stays open, but nothing leaves the phone unless you are holding
-  // the button. Release really does stop the audio.
-  // One WebSocket message per render quantum would be ~375 messages a second;
-  // batching to ~10 ms cuts the overhead without adding audible delay.
   node.port.onmessage=e=>{
-    const sending = talking && ws && ws.readyState===1;
-    push(e.data.p, sending);
+    const sending=talking&&ws&&ws.readyState===1;
+    push(e.data.p,sending);
     if(!sending){ pend=[]; pendN=0; return; }
     pend.push(new Int16Array(e.data.b)); pendN+=e.data.b.byteLength/2;
     if(pendN>=CHUNK){
@@ -266,43 +290,76 @@ async function connect(){
       pend=[]; pendN=0; sent+=out.byteLength; ws.send(out.buffer);
     }
   };
-  ctx.createMediaStreamSource(stream).connect(node);
   node.connect(ctx.destination);
-  try{ lock=await navigator.wakeLock.request('screen'); }catch(e){}
+  await ctx.suspend();
   ready=true; connecting=false; talk.classList.remove('busy');
-  say('Ready — hold the button to talk'); paint(); return true;
+  say('Ready — the mic is off'); paint(); return true;
 }
-function teardown(msg,c){
-  ready=false; talking=false;
-  try{ws&&ws.close()}catch(e){} try{ctx&&ctx.close()}catch(e){}
-  try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}
-  try{lock&&lock.release()}catch(e){} lock=null;
-  lap.textContent=''; say(msg||'Disconnected',c); paint();
+let pend=[],pendN=0,CHUNK=480;
+
+// Acquiring on press and stopping on release is the point: while you are not
+// holding the button the microphone is genuinely closed, not muted, so the
+// phone is not recording and the radio/mic draw nothing.
+async function micOn(){
+  const Q=quality(), my=++gen;
+  stream=await navigator.mediaDevices.getUserMedia({audio:{
+    echoCancellation:Q.proc,noiseSuppression:Q.proc,autoGainControl:Q.proc,
+    channelCount:1,sampleRate:Q.rate}});
+  if(my!==gen){ stream.getTracks().forEach(t=>t.stop()); stream=null; return false; }
+  src=ctx.createMediaStreamSource(stream); src.connect(node);
+  await ctx.resume();
+  return true;
+}
+function micOff(){
+  gen++;
+  try{ src&&src.disconnect(); }catch(e){} src=null;
+  try{ stream&&stream.getTracks().forEach(t=>t.stop()); }catch(e){} stream=null;
+  try{ ctx&&ctx.state==='running'&&ctx.suspend(); }catch(e){}
+  pend=[]; pendN=0;
 }
 async function begin(){
+  if(talking) return;
   if(!ready){ if(!await connect()) return; }
-  talking=true; say('Live — streaming to the laptop','live'); paint();
+  talking=true; paint(); say('Opening microphone…');
+  try{
+    if(!await micOn()){ talking=false; paint(); say('Ready — the mic is off'); return; }
+    if(talking) say('Live','live');
+  }catch(e){
+    talking=false; paint(); say('Microphone blocked ('+e.name+')','warn');
+  }
 }
 function end(){
   if(!talking) return;
-  talking=false; say('Ready — hold the button to talk'); paint();
+  talking=false; micOff(); paint(); say('Ready — the mic is off');
 }
-talk.addEventListener('pointerdown',e=>{
-  e.preventDefault();
-  if(hf.checked){ talking?end():begin(); return; }
-  begin();
-});
+function teardown(msg,c){
+  ready=false; talking=false; micOff();
+  try{ws&&ws.close()}catch(e){} try{ctx&&ctx.close()}catch(e){}
+  ctx=null; node=null;
+  try{lock&&lock.release()}catch(e){} lock=null;
+  lap.textContent=''; say(msg||'Disconnected',c); paint();
+}
+
+talk.addEventListener('pointerdown',e=>{ e.preventDefault();
+  if(hf.checked){ talking?end():begin(); } else begin(); });
 ['pointerup','pointercancel','pointerleave'].forEach(ev=>
   talk.addEventListener(ev,e=>{ e.preventDefault(); if(!hf.checked) end(); }));
 talk.addEventListener('contextmenu',e=>e.preventDefault());
-hf.onchange=()=>{ if(!hf.checked) end(); paint(); };
-q.onchange=()=>{
-  try{ localStorage.setItem('pm.q', q.value); }catch(e){}
-  if(ready) teardown('Quality changed — hold the button to reconnect');
-};
+hf.onchange=()=>{ try{localStorage.setItem('pm.hf',hf.checked?'1':'0')}catch(e){}
+  if(!hf.checked) end(); paint(); };
+q.onchange=()=>{ try{localStorage.setItem('pm.q',q.value)}catch(e){}
+  if(ready) teardown('Quality changed — hold to reconnect'); };
 dis.onclick=()=>teardown('Disconnected');
-document.addEventListener('visibilitychange',async()=>{
-  if(!document.hidden&&ready&&!lock){ try{lock=await navigator.wakeLock.request('screen')}catch(e){} }
+
+// Keep the screen awake only while actually streaming.
+async function wake(on){
+  try{ if(on&&!lock) lock=await navigator.wakeLock.request('screen');
+       else if(!on&&lock){ await lock.release(); lock=null; } }catch(e){}
+}
+const _b=begin, _e=end;
+begin=async()=>{ await _b(); if(talking) wake(true); };
+end=()=>{ _e(); wake(false); };
+document.addEventListener('visibilitychange',()=>{
   if(document.hidden&&talking) say('Backgrounded — Android may cut the audio','warn');
 });
 paint();
