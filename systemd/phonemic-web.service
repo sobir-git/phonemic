@@ -1,0 +1,16 @@
+[Unit]
+Description=PhoneMic web microphone receiver
+Documentation=man:phonemic
+After=network-online.target pipewire.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Plain HTTP on loopback only; Cloudflare terminates TLS at the edge.
+EnvironmentFile=%h/.config/phonemic/web.env
+ExecStart=/usr/bin/python3 %h/.local/share/phonemic/lib/webmic.py
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

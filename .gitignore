@@ -1,0 +1,9 @@
+# secrets and machine-local state -- never commit
+certs/
+*.crt
+*.key
+*.pem
+*.token
+*.env
+config
+__pycache__/
