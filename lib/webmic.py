@@ -153,7 +153,7 @@ background:#555;margin-right:.4rem;vertical-align:middle}
 .dot.live{background:var(--green)}.dot.warn{background:var(--amber)}
 
 /* bottom: the button */
-footer{display:flex;justify-content:center;padding:0 1.2rem 2.6rem}
+footer{display:flex;justify-content:center;padding:0 1.2rem clamp(5rem,14vh,9rem)}
 #talk{width:min(56vw,180px);aspect-ratio:1;border-radius:50%;border:0;
 background:#20242a;color:var(--dim);font:600 1rem system-ui;
 display:flex;align-items:center;justify-content:center;text-align:center;padding:1rem;
