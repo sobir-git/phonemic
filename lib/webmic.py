@@ -414,6 +414,24 @@ async def report(ws, state):
             return
         await asyncio.sleep(0.25)
 
+def stop_proc(p):
+    """Make sure the sink writer really dies.
+
+    terminate() alone can leave it holding a sink-input open, which keeps the
+    virtual microphone busy long after the phone has gone.
+    """
+    if p is None:
+        return
+    try: p.stdin.close()
+    except Exception: pass
+    try: p.terminate()
+    except Exception: pass
+    try:
+        p.wait(timeout=2)
+    except Exception:
+        try: p.kill(); p.wait(timeout=2)
+        except Exception: pass
+
 def spawn_sink(rate):
     """Feed raw PCM straight into the sink.
 
@@ -453,9 +471,7 @@ async def handler(ws):
                 r = int(cfg.get("rate", rate))
                 if r != rate and 8000 <= r <= 48000:
                     rate = r
-                    try: ff.stdin.close()
-                    except Exception: pass
-                    ff.terminate()
+                    stop_proc(ff)
                     ff = spawn_sink(rate)
                     print(f"rate -> {rate} Hz", flush=True)
                 continue
@@ -468,9 +484,7 @@ async def handler(ws):
         print("stream ended:", e, flush=True)
     finally:
         task.cancel()
-        try: ff.stdin.close()
-        except Exception: pass
-        ff.terminate()
+        stop_proc(ff)
         print(f"phone disconnected after {time.time()-t0:.0f}s "
               f"({state['n']/2/rate:.1f}s of audio)", flush=True)
 
@@ -480,7 +494,7 @@ async def main():
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(CERT, KEY)
     async with serve(handler, BIND, PORT, ssl=ctx, process_request=process_request,
-                     max_size=None, ping_interval=20):
+                     max_size=None, ping_interval=10, ping_timeout=10):
         print(f"listening on {BIND}:{PORT} ({'https' if ctx else 'http'}) "
               f"sink={SINK} rate={RATE} latency={LATENCY}ms", flush=True)
         await asyncio.get_running_loop().create_future()
