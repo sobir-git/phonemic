@@ -6,13 +6,28 @@ import json
 import os
 from pathlib import Path
 import socket
+import shlex
 import subprocess
 import sys
 import time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
-HOST = 'lan.mic.example.com'
+def configured_host():
+    url = os.environ.get('PM_LOCAL_URL', '')
+    if not url:
+        env_path = Path.home() / '.config/phonemic/web.env'
+        for line in env_path.read_text().splitlines():
+            if line.startswith('PM_LOCAL_URL='):
+                values = shlex.split(line.split('=', 1)[1])
+                url = values[0] if values else ''
+                break
+    parsed = urlsplit(url)
+    if parsed.scheme != 'https' or not parsed.hostname:
+        raise RuntimeError('Set PM_LOCAL_URL to your LAN HTTPS URL')
+    return parsed.hostname
+
+HOST = configured_host()
 
 def api(method, suffix, data=None):
     pem = (Path.home() / '.cloudflared/cert.pem').read_text()

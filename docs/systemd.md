@@ -33,7 +33,8 @@ sudo loginctl enable-linger "$USER"
 
 Settings offers `Use Wi-Fi connection`, which opens
 `https://lan.mic.example.com:8445` with the existing access token and audio
-preferences. This DNS-only hostname resolves to the laptop's private Wi-Fi
+preferences. Replace this example with your own hostname. The DNS-only hostname
+resolves to the laptop's private Wi-Fi
 address. Audio, keys and output connect directly over the LAN; neither
 Tailscale nor Cloudflare Tunnel carries that connection. Both devices must be
 on the same reachable local network. Android asks for microphone permission
@@ -58,7 +59,8 @@ certificate; address changes also restart it, interrupting active connections.
 Installed scripts are in `~/.local/share/phonemic/`. Certbot is isolated in
 its `acme-venv` there; certificate configuration is in
 `~/.config/phonemic/acme`. The two timer/service pairs are in `systemd/`.
-They are specific to this laptop: adapt the hostname and interface before
-installing elsewhere. The standard installer does not install these optional
+The DNS helper reads the hostname from `PM_LOCAL_URL` in the environment or
+`web.env`. Adapt the Wi-Fi interface before installing elsewhere. The standard
+installer does not install these optional
 LAN services. After script changes, copy the scripts to the installed path;
 after unit changes, copy the units and run `systemctl --user daemon-reload`.

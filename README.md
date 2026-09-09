@@ -29,6 +29,10 @@ PhoneMic's default companions are:
   and the remote controls in the phone UI.
 
 Both are optional for microphone streaming and can be replaced or adapted.
+An adapter could trigger [Windows Voice Typing](https://support.microsoft.com/en-US/accessibility/windows/use-voice-typing-to-talk-instead-of-type-on-your-pc)
+or [macOS Dictation](https://support.apple.com/guide/mac-help/mh40584/mac)
+instead of Voice Dictation. PhoneMic does not implement those
+adapters yet; desktop audio routing still needs platform-specific setup.
 
 ## Setup
 
@@ -79,7 +83,8 @@ node tests/test_phone_ui.js
 ```
 
 See [service notes](docs/systemd.md) for operations and the optional LAN setup.
-Those LAN scripts contain machine-specific values. [AGENTS.md](AGENTS.md)
+The LAN scripts read your hostname from local configuration; adapt the interface.
+[AGENTS.md](AGENTS.md)
 describes the author's deployment workflow; adapt it before using it elsewhere.
 Repository edits do not update installed files: reinstall and restart
 `phonemic-web` when changing the receiver.
