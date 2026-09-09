@@ -22,9 +22,18 @@ sudo loginctl enable-linger "$USER"
 
 `phonemic persist` warns when this is off.
 
+## Browser access
+
+Run `phonemic browser pair` locally, then enter the code on the phone.
+`phonemic browser revoke` closes active connections and clears the pairing.
+Restarting or reinstalling preserves it. `PM_PUBLIC_URL` and `PM_LOCAL_URL`
+define accepted origins; `PM_ORIGINS` accepts additional comma-separated origins.
+`PM_AUTH_FILE` optionally changes the private state file location.
+Unpaired requests receive the pairing page, and control connections are denied.
+
 ## Reading the log
 
-- `phone connected: <ip>` — TLS, token, DNS and the tunnel all worked; anything
+- `paired browser connected` means browser authentication succeeded; anything
   wrong after this is in the browser (usually a denied microphone permission).
 - nothing at all — the phone never reached the computer.
 - `rate -> 24000 Hz` — the phone selected a different quality.
@@ -32,7 +41,7 @@ sudo loginctl enable-linger "$USER"
 ## Direct Wi-Fi HTTPS connection
 
 Settings offers `Use Wi-Fi connection`, which opens
-`https://lan.mic.example.com:8445` with the existing access token and audio
+`https://lan.mic.example.com:8445` with the existing browser pairing and audio
 preferences. Replace this example with your own hostname. The DNS-only hostname
 resolves to the laptop's private Wi-Fi
 address. Audio, keys and output connect directly over the LAN; neither
@@ -43,8 +52,9 @@ prevent access; the public connection remains available.
 
 `PM_LOCAL_BIND`, `PM_LOCAL_PORT`, `PM_LOCAL_URL`, `PM_LOCAL_CERT`,
 `PM_LOCAL_KEY`, and `PM_PUBLIC_URL` are in `~/.config/phonemic/web.env`.
-The secondary listener binds only to the Wi-Fi address, requires the same
-access token, and uses a Let's Encrypt certificate. The loopback HTTP listener
+The secondary listener binds only to the Wi-Fi address and uses a Let's Encrypt
+certificate. Switching transfers the pairing through a single-use, 30-second
+ticket. Both origins belong to the same pairing and are revoked together. The loopback HTTP listener
 continues serving Cloudflare Tunnel. A missing Wi-Fi address at boot does not
 stop the public listener.
 

@@ -38,6 +38,7 @@ command -v adb >/dev/null && ok "adb found (USB phone supported)" \
 mkdir -p "$BIN" "$PREFIX/lib" "$PREFIX/assets" "$PREFIX/certs"
 chmod 700 "$PREFIX/certs"
 install -m 755 "$SRC/phonemic"        "$BIN/phonemic"
+install -m 644 "$SRC/lib/webauth.py"  "$PREFIX/lib/webauth.py"
 install -m 644 "$SRC/lib/webmic.py"   "$PREFIX/lib/webmic.py"
 install -m 644 "$SRC"/assets/*.png    "$PREFIX/assets/"
 ok "installed to $BIN/phonemic and $PREFIX"

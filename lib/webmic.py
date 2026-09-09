@@ -13,10 +13,18 @@ either way.
 """
 import asyncio, json, os, pathlib, ssl, subprocess, sys, signal, time
 from contextlib import AsyncExitStack
+import base64, hashlib, re
+from http.cookies import SimpleCookie
+from urllib.parse import urlsplit
+try:
+    from .webauth import AuthStore, COOKIE, SESSION_SECONDS, canonical_origin
+except ImportError:
+    from webauth import AuthStore, COOKIE, SESSION_SECONDS, canonical_origin
 
 SINK   = os.environ.get("PM_SINK", "phonemic2")
 SRC    = os.environ.get("PM_SRC", SINK + "_src")
-TOKEN  = os.environ.get("PM_TOKEN", "")
+AUTH = AuthStore()
+ACTIVE_CONNECTIONS = set()
 PORT   = int(os.environ.get("PM_PORT", "8444"))
 BIND   = os.environ.get("PM_BIND", "127.0.0.1")
 CERT   = os.environ.get("PM_CERT", "")
@@ -82,14 +90,13 @@ def asset(name, ctype):
                                         "Content-Length": str(len(body)),
                                         "Cache-Control": "public, max-age=86400"}), body)
 
-def manifest(token):
-    q = f"?token={token}" if token else ""
+def manifest():
     m = {
         "name": "PhoneMic", "short_name": "PhoneMic",
         "description": "Use this phone as a microphone for your computer.",
-        "start_url": "/" + q, "scope": "/", "display": "standalone",
-        "orientation": "portrait", "background_color": "#111316",
-        "theme_color": "#111316",
+        "start_url": "/", "scope": "/", "display": "standalone",
+        "orientation": "portrait", "background_color": "#000000",
+        "theme_color": "#000000",
         "icons": [
             {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},
             {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},
@@ -112,20 +119,24 @@ self.addEventListener('fetch',    e => { return; });
 PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>PhoneMic</title>
-<link rel=manifest href="/manifest.webmanifest__Q__">
-<meta name=theme-color content="#101728">
+<link rel=manifest href="/manifest.webmanifest">
+<meta name=theme-color content="#000000">
 <meta name=mobile-web-app-capable content=yes>
 <meta name=apple-mobile-web-app-capable content=yes>
 <meta name=apple-mobile-web-app-status-bar-style content=black>
 <link rel=apple-touch-icon href="/apple-touch-icon.png">
 <style>
 :root{color-scheme:dark;
---bg:#101728;--well:#0B111F;--surface:#1A2440;--raise:#243156;--key:#2A3860;
---line:#37477A;--edge:#4A5C93;
---fg:#EEF3FF;--dim:#9FB0D2;--mute:#6E7EA6;
---voice:#14E39C;--voice-ink:#04231A;
---agent:#5B9CFF;--term:#45DCDC;--pad:#A98BFF;
---warn:#FFC24D;--alert:#FF7A6E;
+/* OLED: unlit black is the default surface. Panels are drawn with hairlines,
+   not fills, and each zone carries its hue in text and borders instead. Solid
+   colour is reserved for the moments that are short-lived: a key under a
+   thumb, the talk bar while the microphone is open. */
+--bg:#000;--well:#000;--surface:#000;--raise:#161D33;--key:#000;
+--line:#4E5C92;--edge:#6A79B4;
+--fg:#F4F7FF;--dim:#B3C0DA;--mute:#7F8CAC;
+--voice:#19F0A6;--voice-ink:#00140D;
+--agent:#7AB4FF;--term:#4FE8E8;--pad:#BBA1FF;
+--warn:#FFC85C;--alert:#FF8E7F;
 --r:14px}
 *{box-sizing:border-box}
 .icon{width:20px;height:20px;flex-shrink:0;display:inline-block;vertical-align:middle;
@@ -144,23 +155,22 @@ padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-
 /* floating settings key — the top bar is gone, the page starts at the content */
 #gear{position:fixed;top:calc(env(safe-area-inset-top) + .45rem);right:calc(env(safe-area-inset-right) + .55rem);
 z-index:6;width:40px;height:40px;padding:0;border-radius:12px;line-height:1;
-background:var(--raise);border:1px solid var(--line);color:var(--dim);
-box-shadow:0 2px 0 #0A1020,0 6px 18px #05070f66}
-#gear.open{background:var(--agent);border-color:var(--agent);color:#06122B;box-shadow:0 2px 0 #0A1020}
-#gear:active{transform:translateY(2px);box-shadow:none}
+background:var(--bg);border:1px solid var(--line);color:var(--dim)}
+#gear.open{border-color:var(--agent);color:var(--agent)}
+#gear:active{transform:translateY(2px);background:var(--raise)}
 
 #panel[hidden]{display:none}
 #panel{margin:.5rem .55rem 0;border:1px solid var(--line);border-radius:var(--r);
 background:var(--surface);border-left:3px solid var(--agent);
 padding:2.9rem .9rem .8rem;display:flex;flex-direction:column;gap:.7rem;font-size:.85rem}
-#connection-card{border:1px solid var(--edge);border-left:3px solid var(--voice);
-border-radius:12px;padding:.85rem;background:var(--raise)}
+#connection-card{border:1px solid var(--line);border-left:3px solid var(--voice);
+border-radius:12px;padding:.85rem;background:var(--bg)}
 #connection-card[hidden]{display:none}
 #connection-card strong{font-size:.92rem;letter-spacing:.01em}
 #connection-card p{color:var(--dim);line-height:1.5;margin:.4rem 0 .7rem}
-#connection-card button{background:var(--voice);color:var(--voice-ink);border:0;border-radius:10px;
-padding:.72rem 1rem;font:inherit;font-weight:700;width:100%;box-shadow:0 2px 0 #0A7A54}
-#connection-card button:active{transform:translateY(2px);box-shadow:none}
+#connection-card button{background:var(--bg);color:var(--voice);border:1px solid var(--voice);border-radius:10px;
+padding:.72rem 1rem;font:inherit;font-weight:700;width:100%}
+#connection-card button:active{transform:translateY(2px);background:var(--raise)}
 #connection-address{display:block;color:var(--dim);overflow-wrap:anywhere;margin-top:.55rem;
 font:.75rem/1.4 ui-monospace,SFMono-Regular,monospace}
 .row{display:flex;align-items:center;justify-content:space-between;gap:1rem}
@@ -173,7 +183,7 @@ input[type=checkbox]{width:1.3rem;height:1.3rem;accent-color:var(--voice)}
 .key i{width:.65rem;height:.65rem;border-radius:3px}
 #dis{background:transparent;border:1px solid var(--alert);color:var(--alert);border-radius:10px;
 padding:.55rem;font:600 .8rem system-ui}
-#dis:active{background:#3A1A20}
+#dis:active{background:#2A1116}
 
 /* middle: waveform + one line of status */
 main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
@@ -184,8 +194,8 @@ border:1px solid var(--line)}
 #lap{font-size:.75rem;color:var(--mute);text-align:center;min-height:1.1em;max-width:24rem}
 .dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;
 background:var(--mute);margin-right:.45rem;vertical-align:middle}
-.dot.live{background:var(--voice);box-shadow:0 0 0 4px #14E39C33}
-.dot.warn{background:var(--warn);box-shadow:0 0 0 4px #FFC24D33}
+.dot.live{background:var(--voice);box-shadow:0 0 0 4px #19F0A62B}
+.dot.warn{background:var(--warn);box-shadow:0 0 0 4px #FFC85C2B}
 
 /* the agent remote — azure is its hue throughout */
 #remote{width:100%;max-width:480px;border:1px solid var(--line);border-radius:var(--r);
@@ -194,28 +204,28 @@ background:var(--surface);border-top:3px solid var(--agent);padding:.7rem;margin
   gap:.5rem;padding-right:44px;margin-bottom:.5rem}
 .remote-head label{font-size:.8rem;color:var(--fg);font-weight:650;letter-spacing:.02em}
 #remote #panes{width:100%;min-height:64px;display:flex;align-items:center;gap:.8rem;
-  padding:.7rem .8rem;text-align:left;background:#1B2C55;border:1px solid var(--agent);border-radius:12px}
+  padding:.7rem .8rem;text-align:left;background:var(--bg);border:1px solid var(--agent);border-radius:12px}
 .context-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:.2rem}
 .context-name{font-size:.92rem;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.context-detail{font:.72rem/1.4 ui-monospace,SFMono-Regular,monospace;color:#B9CBF0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.context-detail{font:.72rem/1.4 ui-monospace,SFMono-Regular,monospace;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .context-chevron{font-size:1.1rem;color:var(--agent)}
 .agent-dot{width:10px;height:10px;border-radius:50%;flex:0 0 10px;border:2px solid var(--mute);background:transparent}
 .agent-dot.idle{border-color:var(--voice)}
-.agent-dot.working{border-color:var(--warn);background:var(--warn);box-shadow:0 0 0 3px #FFC24D2E}
-.agent-dot.done{border-color:var(--term);background:var(--term);box-shadow:0 0 0 3px #45DCDC2E}
-.agent-dot.blocked{border-color:var(--alert);background:var(--alert);box-shadow:0 0 0 3px #FF7A6E2E}
+.agent-dot.working{border-color:var(--warn);background:var(--warn);box-shadow:0 0 0 3px #FFC85C2E}
+.agent-dot.done{border-color:var(--term);background:var(--term);box-shadow:0 0 0 3px #4FE8E82E}
+.agent-dot.blocked{border-color:var(--alert);background:var(--alert);box-shadow:0 0 0 3px #FF8E7F2E}
 
 #pane-picker{position:fixed;inset:auto 0 0;margin:0 auto;width:min(100%,480px);max-width:100%;
   height:min(78dvh,660px);max-height:92dvh;padding:0;border:1px solid var(--line);border-bottom:0;
   border-top:3px solid var(--agent);
-  border-radius:20px 20px 0 0;background:var(--bg);color:var(--fg);box-shadow:0 -16px 80px #04060cCC}
+  border-radius:20px 20px 0 0;background:var(--bg);color:var(--fg)}
 #pane-picker[open]{display:flex;flex-direction:column}
-#pane-picker::backdrop{background:#070B14C7;backdrop-filter:blur(6px)}
+#pane-picker::backdrop{background:#000000C7;backdrop-filter:blur(6px)}
 .picker-handle{width:36px;height:4px;background:var(--edge);border-radius:4px;flex-shrink:0;margin:10px auto 0}
 .picker-heading{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem .7rem}
 .picker-heading h2{font-size:1.05rem;margin:0;font-weight:700}
 .picker-heading p{font-size:.75rem;color:var(--dim);margin:.3rem 0 0}
-#picker-close{width:40px;height:40px;border:1px solid var(--line);border-radius:12px;background:var(--raise);color:var(--fg);font-size:1.3rem}
+#picker-close{width:40px;height:40px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--fg);font-size:1.3rem}
 .picker-tabs{display:flex;margin:0 1rem .6rem;border-bottom:1px solid var(--line);gap:1.3rem}
 .picker-tabs button{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);
   padding:.7rem 0;font:650 .82rem system-ui;min-height:44px}
@@ -225,20 +235,21 @@ background:var(--surface);border-top:3px solid var(--agent);padding:.7rem;margin
   min-height:64px;text-align:left;border:1px solid transparent;border-left:3px solid transparent;
   border-radius:10px;background:none;color:var(--fg)}
 .context-row+.context-row{margin-top:3px}
-.context-row[aria-current=true]{background:#1B2C55;border-color:var(--agent);border-left-color:var(--agent)}
+.context-row[aria-current=true]{border-left-color:var(--agent)}
+.context-row[aria-current=true] .context-name{color:var(--agent)}
 .context-row:active{background:var(--raise)}
 .context-row .context-name{font-size:.86rem;font-weight:500;font-family:ui-monospace,SFMono-Regular,monospace}
-.context-row[aria-current=true] .context-name{font-weight:700;color:#fff}
+.context-row[aria-current=true] .context-name{font-weight:700}
 .context-mark{color:var(--agent);font-size:.9rem;width:16px;text-align:center}
 
 /* keycaps: raised, with a real press */
 #remote button{min-height:44px;background:var(--key);border:1px solid var(--edge);
-color:var(--fg);border-radius:10px;font:600 .82rem system-ui;touch-action:manipulation;
-box-shadow:0 2px 0 #0C142A}
+color:var(--fg);border-radius:10px;font:600 .82rem system-ui;touch-action:manipulation}
 #remote button:active{background:var(--raise)}
-#remote button:disabled{opacity:.38;box-shadow:none}
-#remote button[aria-pressed=true]{background:var(--voice);border-color:var(--voice);color:var(--voice-ink);box-shadow:0 2px 0 #0A7A54}
-#refresh-panes{padding:0 .7rem;min-height:32px!important;box-shadow:none!important}
+#remote button:disabled{opacity:.38}
+#remote button[aria-pressed=true]{background:var(--voice);border-color:var(--voice);color:var(--voice-ink)}
+#remote [data-key=c][data-ctrl]{color:var(--alert);border-color:#95504A}
+#refresh-panes{padding:0 .7rem;min-height:32px!important}
 .remote-tools,.remote-edit{display:flex;gap:.4rem;margin-top:.6rem}
 .remote-tools button{flex:1;min-width:0}
 .remote-navigation{display:flex;align-items:flex-start;justify-content:space-between;
@@ -246,14 +257,15 @@ box-shadow:0 2px 0 #0C142A}
 .direction-pad{display:flex;flex-direction:column;align-items:center;gap:.3rem}
 .direction-middle{display:flex;align-items:center;gap:.3rem}
 #remote .direction-pad button{width:52px;height:46px;font-size:1.3rem;border-radius:12px;
-  background:var(--raise);box-shadow:0 3px 0 #0C142A;transition:transform .06s,background .06s}
+  background:var(--key);border-color:var(--edge);transition:transform .06s,background .06s}
 .remote-scroll{display:flex;flex-direction:column;gap:.35rem;flex:1;min-width:0;max-width:150px}
 #remote .remote-scroll button{min-height:44px;white-space:nowrap}
-#remote .remote-scroll [data-scroll=bottom]{min-height:34px;background:transparent;border-color:var(--line);color:var(--dim);box-shadow:none}
+#remote .remote-scroll [data-scroll=bottom]{min-height:34px;background:transparent;border-color:var(--line);color:var(--dim)}
 .remote-edit button{flex:1;min-width:0}
 #remote .remote-edit [data-key=space]{flex:1.3}
-#remote .remote-edit [data-key=enter]{background:var(--voice);border-color:var(--voice);color:var(--voice-ink);box-shadow:0 2px 0 #0A7A54}
-#remote button:active:not(:disabled){transform:translateY(2px);box-shadow:none}
+#remote .remote-edit [data-key=enter]{color:var(--voice);border-color:var(--voice)}
+#remote .remote-edit [data-key=enter]:active{background:var(--voice);color:var(--voice-ink)}
+#remote button:active:not(:disabled){transform:translateY(2px)}
 #remote button{touch-action:manipulation;-webkit-touch-callout:none;user-select:none}
 #remote-status:empty{display:none}
 #remote-status{font-size:.74rem;color:var(--dim);margin-top:.5rem;min-height:1.1em}
@@ -262,12 +274,12 @@ box-shadow:0 2px 0 #0C142A}
 #output-viewer{margin-top:.7rem;border:1px solid var(--line);border-left:3px solid var(--term);
   border-radius:12px;overflow:hidden;background:var(--well)}
 .output-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
-  padding:.4rem .6rem;border-bottom:1px solid var(--line);background:#121B31}
+  padding:.4rem .6rem;border-bottom:1px solid var(--line);background:var(--bg)}
 .output-toolbar h2{margin:0;font-size:.76rem;font-weight:650;color:var(--term)}
 .output-actions{display:flex;align-items:center;gap:.3rem}
 #output-viewer button{display:flex;align-items:center;justify-content:center;gap:.3rem;min-height:32px;
   padding:.3rem .5rem;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--dim);font:600 .72rem system-ui}
-#output-viewer button[aria-pressed=true]{color:var(--term);background:#0C2C33;border-color:var(--term)}
+#output-viewer button[aria-pressed=true]{color:var(--term);border-color:var(--term)}
 #output-viewer .icon{width:16px;height:16px}
 [hidden]{display:none!important}
 #command-panel{margin:.65rem 0}
@@ -275,13 +287,13 @@ box-shadow:0 2px 0 #0C142A}
 .command-row input,.command-row select{min-width:0;flex:1;background:var(--key);color:var(--fg);border:1px solid var(--edge);border-radius:9px;padding:.6rem}
 #workspace-dialog,#command-dialog{width:min(90vw,430px);box-sizing:border-box;background:var(--surface);color:var(--fg);
   border:1px solid var(--line);border-top:3px solid var(--agent);border-radius:16px;padding:1.1rem}
-#workspace-dialog::backdrop,#command-dialog::backdrop{background:#070B14C7}
+#workspace-dialog::backdrop,#command-dialog::backdrop{background:#000000C7}
 #command-dialog button{padding:.7rem 1rem}
 #command-buttons{margin:0}
 #command-buttons button{overflow-wrap:anywhere;max-width:100%;touch-action:manipulation;-webkit-touch-callout:none}
 .control-tabs{display:flex;gap:.4rem;margin:.65rem 0}
 .control-tabs button{flex:1;min-width:0}
-.control-tabs button[aria-expanded=true]{background:#1B2C55!important;border-color:var(--agent)!important;color:var(--fg)!important;box-shadow:0 2px 0 #0C142A!important}
+.control-tabs button[aria-expanded=true]{border-color:var(--agent)!important;color:var(--agent)!important}
 #composer-panel{margin:.65rem 0}
 #composer,#workspace-dialog input,.output-search input{box-sizing:border-box;width:100%;padding:.7rem;
   background:var(--key);color:var(--fg);border:1px solid var(--edge);border-radius:10px;font:inherit;margin:.4rem 0}
@@ -293,7 +305,7 @@ box-shadow:0 2px 0 #0C142A}
 .command-hint{font-size:.75rem;color:var(--dim)}
 #output-scroll{height:170px;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y;background:var(--well);scrollbar-color:var(--edge) var(--well)}
 #terminal-output{margin:0;padding:.6rem .75rem;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
-  color:#E8EFF9;white-space:pre;min-height:100%;width:max-content;min-width:100%;user-select:text;-webkit-user-select:text}
+  color:#E8EFF9;background:var(--well);white-space:pre;min-height:100%;width:max-content;min-width:100%;user-select:text;-webkit-user-select:text}
 #output-error{font-size:.72rem;padding:.35rem .65rem;color:var(--alert);border-top:1px solid var(--line)}
 #output-error:empty{display:none}
 #output-dialog{position:fixed;inset:0;margin:0;width:100%;max-width:100%;height:100dvh;max-height:100dvh;
@@ -302,19 +314,19 @@ box-shadow:0 2px 0 #0C142A}
 #output-dialog #output-viewer{height:100%;margin:0;border:0;border-radius:0;display:flex;flex-direction:column}
 #output-dialog .output-toolbar{padding:.7rem}
 #output-dialog #output-scroll{flex:1;height:auto;min-height:0}
-#output-dialog::backdrop{background:#070B14EE}
+#output-dialog::backdrop{background:#000000EE}
 
 /* trackpad — violet is its hue */
 #trackpad-panel{margin-top:.7rem;padding:.9rem 0;border:1px solid var(--line);
   border-left:3px solid var(--pad);border-radius:14px;background:var(--well);color:var(--fg)}
-#open-trackpad[aria-expanded=true]{background:#2A2350!important;border-color:var(--pad)!important;color:var(--pad)!important}
+#open-trackpad[aria-expanded=true]{border-color:var(--pad)!important;color:var(--pad)!important}
 #trackpad-panel button{min-height:44px;padding:.5rem 1rem;border:1px solid var(--edge);
   border-radius:10px;background:var(--key);color:var(--fg);font:600 .82rem system-ui;
-  touch-action:manipulation;box-shadow:0 2px 0 #0C142A}
-#trackpad-panel button:active{transform:translateY(2px);box-shadow:none;background:var(--raise)}
+  touch-action:manipulation}
+#trackpad-panel button:active{transform:translateY(2px);background:var(--raise)}
 #trackpad-status{margin:0 .9rem .7rem;color:var(--dim);font-size:.8rem;min-height:2.4em}
 #trackpad-pad{height:min(36dvh,280px);margin:0 .9rem;border:1px solid var(--pad);border-radius:16px;
-  background:radial-gradient(#A98BFF4D 1px,transparent 1px) 0 0/18px 18px,#141C33;
+  background:radial-gradient(#BBA1FF40 1px,transparent 1px) 0 0/18px 18px,var(--well);
   display:grid;place-items:center;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #trackpad-pad span{text-align:center;background:transparent;padding:1rem;color:var(--dim);pointer-events:none}
 .trackpad-clicks{display:flex;gap:.6rem;margin:.9rem .9rem 0}
@@ -322,17 +334,17 @@ box-shadow:0 2px 0 #0C142A}
 
 /* bottom: the one bold thing — a full-width push-to-talk bar */
 footer{display:flex;justify-content:center;padding:0 .55rem clamp(.9rem,4vh,2rem);
-position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 34%);padding-top:.7rem;z-index:5}
+position:sticky;bottom:0;background:linear-gradient(transparent,#000 34%);padding-top:.7rem;z-index:5}
 #talk{width:100%;max-width:480px;aspect-ratio:auto;height:66px;border-radius:18px;
-border:1px solid var(--edge);background:var(--raise);color:var(--fg);
+border:1px solid var(--voice);background:var(--bg);color:var(--voice);
 font:700 1.05rem/1.2 system-ui;letter-spacing:.01em;
 display:flex;align-items:center;justify-content:center;text-align:center;padding:.8rem;
-box-shadow:0 3px 0 #0C142A;transition:background .12s,color .12s,box-shadow .18s,transform .1s;
+transition:background .12s,color .12s,box-shadow .18s,transform .1s;
 touch-action:none;-webkit-touch-callout:none}
-#talk.live{background:var(--voice);border-color:var(--voice);color:var(--voice-ink);
-box-shadow:0 3px 0 #0A7A54,0 0 0 5px #14E39C2E;transform:translateY(1px)}
-#talk.busy{opacity:.55}
-#talk:active:not(.busy){transform:translateY(3px);box-shadow:none}
+#talk.live{background:var(--voice);color:var(--voice-ink);
+box-shadow:0 0 0 5px #19F0A62E;transform:translateY(1px)}
+#talk.busy{opacity:.55;border-color:var(--edge);color:var(--dim)}
+#talk:active:not(.busy){transform:translateY(3px)}
 :focus-visible{outline:2px solid var(--agent);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 
@@ -369,9 +381,9 @@ box-shadow:0 3px 0 #0A7A54,0 0 0 5px #14E39C2E;transform:translateY(1px)}
   <div class=row><label for=dictation>Trigger laptop dictation</label>
     <input type=checkbox id=dictation></div>
   <div class=key>
-    <span><i style="background:#3B486E"></i>not sent</span>
-    <span><i style="background:#FFC24D"></i>sent</span>
-    <span><i style="background:#14E39C"></i>received</span>
+    <span><i style="background:#4A5580"></i>not sent</span>
+    <span><i style="background:#FFC85C"></i>sent</span>
+    <span><i style="background:#19F0A6"></i>received</span>
   </div>
   <button id=dis>Disconnect</button>
 </div>
@@ -512,7 +524,7 @@ try{
     hf.checked=handoff.get('pmhf')==='1';dictation.checked=handoff.get('pmd')==='1';
     localStorage.setItem('pm.q',q.value);localStorage.setItem('pm.hf',hf.checked?'1':'0');
     localStorage.setItem('pm.dictation',dictation.checked?'1':'0');
-    history.replaceState(null,'',location.pathname+location.search);
+    history.replaceState(null,'',location.pathname);
   }
 }catch(e){}
 function setupConnection(){
@@ -527,16 +539,22 @@ function setupConnection(){
   $('connection-address').textContent=local.host;
   const button=$('switch-connection');button.hidden=!target;
   button.textContent=onLaptop?'Use internet connection':'Use Wi-Fi connection';
-  button.onclick=()=>{
+  button.onclick=async()=>{
     if(talking||starting||capturing){$('connection-help').textContent='Finish recording before switching connections.';return;}
-    const next=new URL(target);next.search=location.search;
-    next.hash=new URLSearchParams({pmq:q.value,pmhf:hf.checked?'1':'0',pmd:dictation.checked?'1':'0'}).toString();
-    location.assign(next.href);
+    try{
+      const next=new URL(target);next.search='';
+      const response=await fetch('/auth/handoff',{headers:{'X-PhoneMic-Target':next.origin},cache:'no-store'});
+      if(!response.ok)throw Error('Pair this browser again before switching connections.');
+      const {ticket}=await response.json();
+      next.hash=new URLSearchParams({handoff:ticket,pmq:q.value,pmhf:hf.checked?'1':'0',pmd:dictation.checked?'1':'0'}).toString();
+      location.assign(next.href);
+    }catch(error){$('connection-help').textContent=error.message;}
+
   };
 }
 setupConnection();
 const quality=()=>{ const [r,pr]=q.value.split(':'); return {rate:+r, proc:pr==='1'}; };
-const say=(t,c)=>{ st.innerHTML='<span class="dot '+(c||'')+'"></span>'+t; };
+const say=(t,c)=>{st.textContent=t;const dot=document.createElement('span');dot.className='dot '+(c||'');st.prepend(dot);};
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
 gear.onclick=()=>{ panel.hidden=!panel.hidden; gear.classList.toggle('open',!panel.hidden); };
@@ -561,14 +579,14 @@ function confirmRx(rx){
 function draw(){
   if(!talking) push(0,false);        // keep the timeline scrolling when idle
   const W=vis.width,H=vis.height,bw=W/BARS;
-  g.fillStyle='#0B111F'; g.fillRect(0,0,W,H);
-  g.fillStyle='#1F2B4A';
+  g.fillStyle='#000000'; g.fillRect(0,0,W,H);
+  g.fillStyle='#232C46';
   for(let k=PER_SEC;k<BARS;k+=PER_SEC) g.fillRect(W-k*bw,0,1,H);
-  g.fillStyle='#37477A'; g.fillRect(0,H/2-1,W,2);
+  g.fillStyle='#4E5C92'; g.fillRect(0,H/2-1,W,2);
   for(let i=0;i<hist.length;i++){
     const h=hist[i],x=W-(hist.length-i)*bw;
     const amp=Math.max(2,Math.min(1,h.p*1.5)*(H*0.9));
-    g.fillStyle=h.s===2?'#14E39C':h.s===1?'#FFC24D':'#3B486E';
+    g.fillStyle=h.s===2?'#19F0A6':h.s===1?'#FFC85C':'#4A5580';
     g.fillRect(x+bw*0.15,(H-amp)/2,Math.max(1,bw*0.7),amp);
   }
   requestAnimationFrame(draw);
@@ -590,6 +608,12 @@ function renderLaptop(m){
 }
 
 // The socket and audio graph stay up; the microphone itself does not.
+async function checkBrowserAccess(){
+  if(typeof fetch==='undefined')return;
+  try{const response=await fetch('/auth/status',{cache:'no-store'});
+    if(response.status===401){manualDisconnect=true;clearTimeout(reconnectTimer);location.replace('/');}
+  }catch{}
+}
 function scheduleReconnect(delay=reconnectDelay){
   if(manualDisconnect||document.hidden||navigator.onLine===false||reconnectTimer!==null)return;
   reconnectTimer=setTimeout(()=>{
@@ -620,7 +644,7 @@ async function connectSocket(){
     try{oldSocket&&oldSocket.close()}catch(_){} }
   connecting=true; talk.classList.add('busy'); say('Connecting…');
   const Q=quality();
-  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'+location.search);
+  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
   const socket=ws;
   ws.binaryType='arraybuffer';
   ws.onmessage=e=>{ if(ws!==socket) return; lastMessageAt=Date.now(); try{ const m=JSON.parse(e.data);
@@ -641,7 +665,7 @@ async function connectSocket(){
     }
     renderLaptop(m); confirmRx(m.rx);
   }catch(_){} };
-  ws.onclose=()=>{ if(ws===socket) teardown('Connection lost — reconnecting…','warn'); };
+  ws.onclose=(event={})=>{if(ws===socket){teardown('Connection lost — reconnecting…','warn');checkBrowserAccess();}};
   ws.onerror=()=>{ if(ws===socket) say('Connection error','warn'); };
   try{ await new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>{socket.close();reject(new Error('Connection timed out'))},10000);
@@ -649,7 +673,7 @@ async function connectSocket(){
     socket.addEventListener('close',()=>{clearTimeout(timer);reject(new Error('Connection closed'))},{once:true});
   });
   if(ws!==socket||socket.readyState!==1) throw new Error('Connection closed'); }
-  catch(e){ if(ws===socket){connecting=false;talk.classList.remove('busy');say('Could not reach the computer — retrying…','warn');} return false; }
+  catch(e){ if(ws===socket){connecting=false;talk.classList.remove('busy');say('Could not reach the computer — retrying…','warn');} checkBrowserAccess();return false; }
   ws.send(JSON.stringify({rate:ctx?ctx.sampleRate:Q.rate,proc:Q.proc}));
   ready=true; reconnectDelay=1000;lastMessageAt=Date.now();connecting=false; talk.classList.remove('busy');
   if(!starting&&!capturing&&!talking) say('Ready — touch to record');
@@ -1059,7 +1083,7 @@ function renderPicked(){
   selectOutputPane(paneSelect.value);
 }
 // Terminal output is untrusted: create text nodes, never HTML or clickable links.
-const ansiColors=['#202936','#fa7777','#72dc99','#f2d675','#85b5ff','#d6a0f4','#73dfe4','#dbe5f3',
+const ansiColors=['#000000','#fa7777','#72dc99','#f2d675','#85b5ff','#d6a0f4','#73dfe4','#dbe5f3',
   '#8d9aaf','#ff9999','#98f1b5','#ffeb94','#adcfff','#e7baff','#a0f0f2','#ffffff'];
 function terminalColor(index){
   if(index<16) return ansiColors[index];
@@ -1118,7 +1142,7 @@ function renderTerminal(text){
     if(style.bg)span.style.backgroundColor=style.bg;
     if(style.bold)span.style.fontWeight='700';
     if(style.underline)span.style.textDecoration='underline';
-    if(style.reverse){span.style.color=style.bg||'#080c12';span.style.backgroundColor=style.fg||'#e8eff9'}
+    if(style.reverse){span.style.color=style.bg||'#000000';span.style.backgroundColor=style.fg||'#e8eff9'}
     fragment.append(span);
   }
   terminalOutput.replaceChildren(fragment);
@@ -1287,33 +1311,186 @@ paint();
 
 # ---------------------------------------------------------------------- server
 
-def ok_token(path):
-    return True if not TOKEN else f"token={TOKEN}" in path
+PAIR_PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>Pair PhoneMic</title>
+<link rel=manifest href=/manifest.webmanifest>
+<style>body{background:#000;color:#f4f7ff;font:16px/1.5 system-ui;max-width:380px;margin:10vh auto;padding:24px}
+input,button{box-sizing:border-box;width:100%;font:inherit;padding:14px;border-radius:10px;margin:8px 0}
+input{background:#000;color:inherit;border:1px solid #5a68a0}
+button{background:#000;border:1px solid #19f0a6;color:#19f0a6;font-weight:650}
+button:active{background:#19f0a6;color:#00140d}
+small{color:#b3c0da}code{white-space:nowrap;color:#4fe8e8}#error{color:#ff8e7f}</style></head><body>
+<h1>Pair this browser</h1><p>On your computer, run <code>phonemic browser pair</code>, then enter the code below.</p>
+<form id=pair-form><label for=code>Pairing code</label><input id=code autocomplete=one-time-code maxlength=32 required autofocus>
+<button id=submit>Pair browser</button></form><p id=error role=alert></p>
+<small>Only one browser can be paired. Pairing here replaces the previous browser.</small>
+<script>
+const params=new URLSearchParams(location.hash.slice(1)),ticket=params.get('handoff');
+params.delete('handoff');history.replaceState(null,'',location.pathname);
+async function exchange(header,value){
+ const response=await fetch('/auth/pair',{headers:{[header]:value},cache:'no-store'});
+ if(!response.ok)throw Error('Code expired or incorrect. Generate a new code on the computer.');
+ history.replaceState(null,'','/'+(params.toString()?'#'+params.toString():''));
+ location.reload();
+}
+document.getElementById('pair-form').onsubmit=async e=>{
+ e.preventDefault();document.getElementById('submit').disabled=true;
+ try{await exchange('X-PhoneMic-Pairing',document.getElementById('code').value);}
+ catch(error){document.getElementById('error').textContent=error.message;}
+ finally{document.getElementById('submit').disabled=false;}
+};
+if(ticket)exchange('X-PhoneMic-Handoff',ticket).catch(()=>{document.getElementById('error').textContent='Connection switch expired. Switch again from the paired page.';});
+// Strict cookies may be omitted on the first navigation from another site.
+else fetch('/auth/status',{cache:'no-store'}).then(r=>{if(r.ok)location.reload();}).catch(()=>{});
+</script></body></html>"""
 
-def forbidden():
-    return Response(403, "Forbidden", Headers({"Content-Type": "text/plain"}), b"bad token\n")
+
+def origins():
+    values = [os.environ.get('PM_PUBLIC_URL', ''), LOCAL_URL]
+    values += os.environ.get('PM_ORIGINS', '').split(',')
+    values += [f'http://localhost:{PORT}', f'http://127.0.0.1:{PORT}']
+    return {origin for value in values if (origin := canonical_origin(value.strip()))}
+
+
+def request_origin(request):
+    host = request.headers.get('Host', '')
+    # Never trust forwarded-host/proto headers. Only configured origins are usable.
+    candidates = [origin for origin in origins() if urlsplit(origin).netloc == host.lower()]
+    supplied = request.headers.get('Origin')
+    if supplied is not None:
+        normalized = canonical_origin(supplied)
+        return normalized if normalized in candidates else None
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def cookie_token(request):
+    value = request.headers.get('Cookie', '')
+    if len(value) > 4096 or sum(part.strip().split('=', 1)[0] == COOKIE for part in value.split(';')) != 1:
+        return None
+    try:
+        parsed = SimpleCookie(value)
+        return parsed[COOKIE].value if COOKIE in parsed else None
+    except Exception:
+        return None
+
+
+def secure_response(response):
+    if 'Cache-Control' in response.headers:
+        del response.headers['Cache-Control']
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Permissions-Policy'] = 'microphone=(self), camera=(), geolocation=()'
+    response.headers['Cross-Origin-Resource-Policy'] = 'same-origin'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000'
+    body = response.body.decode(errors='replace')
+    scripts = re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>', body, flags=re.S)
+    hashes = ' '.join("'sha256-" + base64.b64encode(hashlib.sha256(code.encode()).digest()).decode() + "'" for code in scripts)
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'none'; script-src " + ((hashes + ' blob:') if hashes else "'none'") +
+        "; style-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; "
+        "worker-src 'self' blob:; media-src 'self' blob:; manifest-src 'self'; "
+        "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+    return response
+
+
+def reply(status, body='', ctype='text/plain; charset=utf-8', headers=None):
+    raw = body.encode()
+    return Response(status, {200:'OK',303:'See Other',400:'Bad Request',401:'Unauthorized',
+        403:'Forbidden',404:'Not Found',429:'Too Many Requests',503:'Service Unavailable'}[status],
+        Headers({'Content-Type':ctype,'Content-Length':str(len(raw)),**(headers or {})}), raw)
+
+
+def session_cookie(token):
+    return f'{COOKIE}={token}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age={SESSION_SECONDS}'
+
 
 def process_request(conn, request):
-    path = request.path
-    base = path.split("?")[0]
-    if base == "/sw.js":
-        return Response(200, "OK", Headers({"Content-Type": "text/javascript",
-                                            "Content-Length": str(len(SW)),
-                                            "Service-Worker-Allowed": "/"}), SW)
-    if base in ("/icon-192.png", "/icon-512.png", "/icon-maskable-512.png",
-                "/apple-touch-icon.png"):
-        return asset(base[1:], "image/png")
-    if not ok_token(path):
-        return forbidden()
-    if base == "/manifest.webmanifest":
-        return manifest(TOKEN)
-    if base == "/ws":
-        return None                       # proceed with the websocket handshake
-    config = json.dumps({"local": LOCAL_URL, "public": os.environ.get("PM_PUBLIC_URL", "")}).replace("<", "\\u003c")
-    body = PAGE.replace("__Q__", f"?token={TOKEN}" if TOKEN else "").replace("__CONNECTION_CONFIG__", config).encode()
-    return Response(200, "OK", Headers({"Content-Type": "text/html; charset=utf-8",
-                                        "Content-Length": str(len(body)),
-                                        "Cache-Control": "no-store"}), body)
+    try:
+        response = route_request(conn, request)
+    except Exception:
+        # Corrupt state, duplicate headers, or storage errors never enable access.
+        response = reply(503, 'Authentication unavailable')
+    return secure_response(response) if response is not None else None
+
+
+def route_request(conn, request):
+    origin = request_origin(request)
+    if origin is None:
+        return reply(403, 'Unrecognized origin')
+    path = urlsplit(request.path)
+    base = path.path
+    if request.headers.get('Sec-Fetch-Site') == 'cross-site' and (base == '/ws' or base.startswith('/auth/')):
+        return reply(403, 'Cross-site request denied')
+    if path.query:
+        return reply(303, headers={'Location':'/'}) if base == '/' else reply(400, 'Query credentials are not supported')
+    if base == '/sw.js':
+        return Response(200, 'OK', Headers({'Content-Type':'text/javascript','Service-Worker-Allowed':'/'}), SW)
+    if base in ('/icon-192.png','/icon-512.png','/icon-maskable-512.png','/apple-touch-icon.png'):
+        return asset(base[1:], 'image/png')
+    if base == '/manifest.webmanifest':
+        return manifest()
+    token = cookie_token(request)
+    if base == '/auth/pair':
+        # Custom headers require a CORS preflight from other sites; we grant no CORS access.
+        # This HTTP server accepts GET only, so auth mutations never use query parameters.
+        code, ticket = request.headers.get('X-PhoneMic-Pairing'), request.headers.get('X-PhoneMic-Handoff')
+        if bool(code) == bool(ticket) or len(code or ticket or '') > 128:
+            return reply(400, 'Pairing header required')
+        if not PAIR_REQUEST_BUDGET.take():
+            return reply(429, 'Wait before retrying pairing')
+        session = AUTH.pair(code, origin) if code else AUTH.redeem(ticket, origin)
+        if session:
+            print('Browser paired' if code else 'Browser connection switched', flush=True)
+        return reply(200, headers={'Set-Cookie':session_cookie(session)}) if session else reply(401, 'Pairing failed')
+    authenticated = AUTH.valid(token, origin)
+    if base == '/':
+        if not authenticated:
+            return reply(200, PAIR_PAGE, 'text/html; charset=utf-8')
+        config = json.dumps({'local':LOCAL_URL,'public':os.environ.get('PM_PUBLIC_URL','')}).replace('<', '\\u003c')
+        return reply(200, PAGE.replace('__CONNECTION_CONFIG__',config), 'text/html; charset=utf-8')
+    if not authenticated:
+        return reply(401, 'Pair this browser on the computer')
+    if base == '/auth/status':
+        return reply(200)
+    if base == '/auth/handoff':
+        target = canonical_origin(request.headers.get('X-PhoneMic-Target', ''))
+        if target not in origins() or target == origin:
+            return reply(400, 'Invalid connection target')
+        ticket = AUTH.handoff(token, origin, target)
+        return reply(200, json.dumps({'ticket':ticket}), 'application/json') if ticket else reply(401)
+    if base == '/ws':
+        if not request.headers.get('Origin'):
+            return reply(403, 'WebSocket Origin required')
+        conn.phonemic_auth = (token, origin)
+        return None
+    return reply(404, 'Not found')
+
+
+class Budget:
+    def __init__(self, rate, capacity):
+        self.rate, self.capacity, self.tokens, self.last = rate, capacity, capacity, time.monotonic()
+
+    def take(self, amount=1):
+        now = time.monotonic()
+        self.tokens = min(self.capacity, self.tokens + max(0, now-self.last)*self.rate)
+        self.last = now
+        if amount > self.tokens:
+            return False
+        self.tokens -= amount
+        return True
+
+
+PAIR_REQUEST_BUDGET = Budget(0.5, 10)
+
+
+async def guard_session(ws):
+    while True:
+        await asyncio.sleep(1)
+        if not AUTH.valid(*ws.phonemic_auth):
+            await ws.close(4401, 'Browser access revoked or expired')
+            return
 
 async def report(ws, state):
     """Tell the phone what the laptop is doing, and how much audio arrived.
@@ -1584,8 +1761,6 @@ class Dictation:
 
 async def mouse_control(command):
     """Accept only bounded relative movement and complete clicks on the local X11 desktop."""
-    if not TOKEN:
-        raise RuntimeError("Trackpad requires a PhoneMic access token")
     if not isinstance(command, dict):
         raise RuntimeError("Invalid mouse command")
     action = command.get("action")
@@ -1616,7 +1791,21 @@ async def mouse_control(command):
 
 
 async def handler(ws):
-    peer = ws.remote_address[0] if ws.remote_address else "?"
+    credentials = getattr(ws, 'phonemic_auth', (None, None))
+    if not AUTH.valid(*credentials):
+        await ws.close(4401, 'Pair this browser')
+        return
+    if len(ACTIVE_CONNECTIONS) >= 4:
+        await ws.close(1013, 'Too many connections')
+        return
+    ACTIVE_CONNECTIONS.add(ws)
+    try:
+        await handle_authenticated(ws)
+    finally:
+        ACTIVE_CONNECTIONS.discard(ws)
+
+
+async def handle_authenticated(ws):
     # Small frames arrive continuously; Nagle would batch them into extra delay.
     try:
         sock = ws.transport.get_extra_info("socket")
@@ -1625,7 +1814,7 @@ async def handler(ws):
             sock.setsockopt(_s.IPPROTO_TCP, _s.TCP_NODELAY, 1)
     except Exception:
         pass
-    print(f"phone connected: {peer}", flush=True)
+    print("paired browser connected", flush=True)
     ff = spawn_sink(RATE)
     rate = RATE
     dictation = Dictation()
@@ -1634,10 +1823,18 @@ async def handler(ws):
     playback_until = 0.0
     task = asyncio.create_task(report(ws, state))
     herdr_task = asyncio.create_task(report_herdr(ws, herdr))
+    guard = asyncio.create_task(guard_session(ws))
+    controls, audio = Budget(40, 80), Budget(192000, 512000)
     t0 = time.time()
     try:
         async for msg in ws:
             if isinstance(msg, str):
+                if not AUTH.valid(*ws.phonemic_auth):
+                    await ws.close(4401, 'Browser access revoked or expired')
+                    break
+                if len(msg) > 100000 or not controls.take():
+                    await ws.close(1008, 'Control message limit exceeded')
+                    break
                 # The phone announces its chosen quality before sending audio.
                 try:
                     cfg = json.loads(msg)
@@ -1655,8 +1852,6 @@ async def handler(ws):
                     continue
                 if "herdr" in cfg:
                     try:
-                        if not TOKEN:
-                            raise RuntimeError("Terminal controls require a PhoneMic access token")
                         if not isinstance(cfg["herdr"], dict):
                             raise RuntimeError("Invalid terminal command")
                         result = await herdr.control(cfg["herdr"])
@@ -1670,8 +1865,6 @@ async def handler(ws):
                         action = cfg["dictation"]
                         if action == "start":
                             if cfg.get("pane"):
-                                if not TOKEN:
-                                    raise RuntimeError("Terminal controls require a PhoneMic access token")
                                 await herdr.control({"action": "focus", "pane": cfg["pane"]})
                             await dictation.start()
                         elif action in ("stop", "abort"):
@@ -1685,7 +1878,10 @@ async def handler(ws):
                         message = str(error) if isinstance(error, RuntimeError) else "Laptop dictation unavailable; check that its updated daemon is running"
                         await ws.send(json.dumps({"type": "dictation", "error": message}))
                     continue
-                r = int(cfg.get("rate", rate))
+                r = cfg.get("rate", rate)
+                if type(r) is not int or not 8000 <= r <= 48000:
+                    await ws.close(1008, "Invalid sample rate")
+                    break
                 if r != rate and 8000 <= r <= 48000:
                     rate = r
                     stop_proc(ff)
@@ -1693,16 +1889,21 @@ async def handler(ws):
                     print(f"rate -> {rate} Hz", flush=True)
                 continue
             if isinstance(msg, bytes) and ff.stdin:
+                if len(msg) % 2 or not audio.take(len(msg)):
+                    await ws.close(1008, "Audio rate limit exceeded")
+                    break
                 # Unflushed, Python holds ~8 KB before writing -- about 170 ms
                 # of delay at these rates, for nothing.
                 playback_until = max(time.monotonic(), playback_until) + len(msg)/2/rate
                 ff.stdin.write(msg); ff.stdin.flush()
                 state["n"] += len(msg)
     except Exception as e:
-        print("stream ended:", e, flush=True)
+        print("stream ended", flush=True)
     finally:
         task.cancel()
         herdr_task.cancel()
+        guard.cancel()
+        await asyncio.gather(task, herdr_task, guard, return_exceptions=True)
         await dictation.close()
         stop_proc(ff)
         print(f"phone disconnected after {time.time()-t0:.0f}s "
@@ -1715,15 +1916,15 @@ async def main():
         ctx.load_cert_chain(CERT, KEY)
     async with AsyncExitStack() as stack:
         await stack.enter_async_context(serve(handler, BIND, PORT, ssl=ctx,
-            process_request=process_request, max_size=None, ping_interval=20, ping_timeout=60))
+            process_request=process_request, max_size=512*1024, max_queue=8, compression=None, ping_interval=20, ping_timeout=30))
         if LOCAL_BIND:
-            if not TOKEN or not LOCAL_URL.startswith("https://"):
-                raise RuntimeError("Laptop listener requires HTTPS and an access token")
+            if not canonical_origin(LOCAL_URL) or not LOCAL_URL.startswith("https://"):
+                raise RuntimeError("Laptop listener requires a configured HTTPS origin")
             local_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             local_ctx.load_cert_chain(LOCAL_CERT, LOCAL_KEY)
             try:
                 await stack.enter_async_context(serve(handler, LOCAL_BIND, LOCAL_PORT, ssl=local_ctx,
-                    process_request=process_request, max_size=None, ping_interval=20, ping_timeout=60))
+                    process_request=process_request, max_size=512*1024, max_queue=8, compression=None, ping_interval=20, ping_timeout=30))
                 print(f"LAN HTTPS listening on {LOCAL_BIND}:{LOCAL_PORT}", flush=True)
             except OSError:
                 # Wi-Fi may be absent at boot. Keep the public endpoint running;

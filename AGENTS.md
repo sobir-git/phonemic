@@ -30,6 +30,7 @@ systemctl --user show phonemic-web -p ExecStart -p ActiveState
 For the default installation, deploy from the repository root:
 
 ```sh
+install -m 644 lib/webauth.py "$HOME/.local/share/phonemic/lib/webauth.py"
 install -m 644 lib/webmic.py "$HOME/.local/share/phonemic/lib/webmic.py"
 systemctl --user restart phonemic-web
 systemctl --user is-active phonemic-web
@@ -50,7 +51,9 @@ reinstalling service units.
 
 After deployment, confirm the service is active and request the page from the
 running receiver. Check HTTP success and that the response contains the changed
-markup or CSS. Use its configured bind address, port, and token; configuration
+markup or CSS. An unpaired request should show the pairing page. For authenticated UI checks,
+use a paired browser; URL tokens are obsolete. Use its configured bind address
+and port; configuration
 is in `~/.config/phonemic/web.env`. Keep tokens and other secrets out of command
 output and replies. An HTTP check confirms delivery, not visual appearance.
 

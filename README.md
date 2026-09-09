@@ -54,15 +54,26 @@ Ensure `~/.local/bin` is on your PATH.
 Expose the local receiver at `127.0.0.1:8444` through an HTTPS/WebSocket proxy,
 or configure direct HTTPS with `PM_CERT` and `PM_KEY`. **Cloudflare is optional**;
 `phonemic tunnel mic.example.com` is a convenience helper if you use it.
-Configuration lives in `~/.config/phonemic/web.env`.
+Configuration lives in `~/.config/phonemic/web.env`. Set `PM_PUBLIC_URL` to your
+HTTPS origin. Only configured origins are accepted.
 
 Run `phonemic web` to start the installed service and print the access URL.
-Open it on your phone, allow microphone access, then select **PhoneMic-2** in
+Run `phonemic browser pair` on the computer and enter its code on the phone.
+Allow microphone access, then select **PhoneMic-2** in
 your computer's audio app. Keep the phone page visible for reliable streaming.
 For Android USB, use `phonemic on` / `phonemic off` and select **PhoneMic**.
 
-The access URL contains a token that also grants desktop-control access.
-Keep it private and put authentication in front of publicly reachable instances.
+Only one browser pairing is active. Pairing another replaces it and disconnects
+the previous browser. Codes expire after five minutes or ten failed attempts;
+browser access lasts 90 days. Use `phonemic browser status` to check it and
+`phonemic browser revoke` to disconnect it. Old URL tokens no longer grant access.
+
+The paired browser can control your desktop. Its secure, HttpOnly cookie is a
+credential, not a hardware lock: protect the phone and browser profile.
+Authentication state stays in `~/.config/phonemic/browser-auth.json` with mode
+600. Keep machine configuration, certificates, and credentials out of Git.
+HTTPS is required outside loopback; keep the proxy backend on loopback.
+An identity gateway or private network can provide another layer.
 
 ## Using the controls
 
@@ -75,6 +86,7 @@ conversation archive. Settings, commands, and drafts persist in the browser.
 
 - `phonemic`: CLI and Linux setup.
 - `lib/webmic.py`: receiver and embedded browser UI.
+- `lib/webauth.py`: pairing, session storage, and revocation.
 - `assets/`, `systemd/`, `scripts/`: icons and deployment helpers.
 
 ```sh

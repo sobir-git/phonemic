@@ -9,7 +9,7 @@ function browser(store = {}) {
     document: {
       getElementById(id) {
         if (!elements.has(id)) elements.set(id, {
-          children:[], replaceChildren(){this.children=[];}, append(child){this.children.push(child);}, showModal(){this.open=true;}, close(){this.open=false;}, focus(){}, textContent: id === "connection-config" ? '{"local":""}' : "", setAttribute(k,v){this[k]=v;}, value: id === 'q' ? '24000:1' : '', checked: false, style: {},
+          children:[], prepend(){}, replaceChildren(){this.children=[];}, append(child){this.children.push(child);}, showModal(){this.open=true;}, close(){this.open=false;}, focus(){}, textContent: id === "connection-config" ? '{"local":""}' : "", setAttribute(k,v){this[k]=v;}, value: id === 'q' ? '24000:1' : '', checked: false, style: {},
           classList: {add(){}, remove(){}, toggle(){}},
           handlers:{}, addEventListener(type,fn){this.handlers[type]=fn;}, getContext(){return {};},
         });
@@ -84,7 +84,7 @@ function browser(store = {}) {
     await run('begin()');
     assert.equal(run('opened'), true);
     assert.equal(run('talking'), false);
-    assert.match(run('st.innerHTML'), /paused or busy/);
+    assert.match(run('st.textContent'), /paused or busy/);
   }
   {
     const run = browser();
@@ -138,7 +138,7 @@ function browser(store = {}) {
     run('sockets[1].onclose()');
     assert.equal(run('ready'), false);
     assert.equal(run('ws'), null);
-    assert.match(run('st.innerHTML'), /reconnecting/);
+    assert.match(run('st.textContent'), /reconnecting/);
     run('dis.onclick()');
   }
   {

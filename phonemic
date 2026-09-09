@@ -52,7 +52,7 @@ pause(){ printf '\n%s    press Enter when done ›%s ' "$C" "$Z"; read -r _ </de
 notify() { command -v notify-send >/dev/null && notify-send -a phonemic "$1" "${2:-}" 2>/dev/null; }
 
 # ---------- config ----------
-load_conf() { TRANSPORT=""; ADDR=""; AUDIO_SOURCE=""; BUFFER=""; SEEDED=0; NET_URL=""; ADDR2=""; WEB_TOKEN=""; WEB_HOST=""; [ -f "$CONF" ] && . "$CONF"; }
+load_conf() { TRANSPORT=""; ADDR=""; AUDIO_SOURCE=""; BUFFER=""; SEEDED=0; NET_URL=""; ADDR2=""; WEB_HOST=""; [ -f "$CONF" ] && . "$CONF"; }
 save_conf() {
   cat > "$CONF" <<EOF
 TRANSPORT="${TRANSPORT:-}"
@@ -62,7 +62,6 @@ BUFFER="${BUFFER:-50}"
 SEEDED="${SEEDED:-0}"
 NET_URL="${NET_URL:-}"
 ADDR2="${ADDR2:-}"
-WEB_TOKEN="${WEB_TOKEN:-}"
 WEB_HOST="${WEB_HOST:-}"
 EOF
 }
@@ -709,25 +708,25 @@ cmd_web() {
 
   if web_unit_installed; then
     systemctl --user start "$WEB_UNIT" || die "could not start $WEB_UNIT"
-    local t h
-    t=$(grep '^PM_TOKEN=' "$CONF_DIR/web.env" 2>/dev/null | cut -d= -f2)
+    local h
     h="${WEB_HOST:-}"
     say ""
     ok "$LABEL ${B}running${Z} ${DIM}(systemd service, starts on boot)${Z}"
     say ""
     if [ -n "$h" ]; then
       say "  ${B}Open on any phone, anywhere:${Z}"
-      say "  ${C}https://$h/?token=$t${Z}"
+      say "  ${C}https://$h/${Z}"
     else
       say "  ${DIM}No public hostname configured yet.${Z}"
-      say "  Reachable on this machine at http://127.0.0.1:8444/?token=$t"
+      say "  Reachable on this machine at http://127.0.0.1:8444/"
     fi
     say ""
+    info "First visit: run ${B}phonemic browser pair${Z} and enter the code on the phone."
     info "Stop with ${B}phonemic off 2${Z} · logs: ${B}journalctl --user -u $WEB_UNIT -f${Z}"
     return 0
   fi
 
-  local name ip crt key tok port=8444
+  local name ip crt key port=8444
   name=$(ts_dns_name); ip=$(ts_self_ip)
   [ -n "$name" ] && [ -n "$ip" ] || die "Tailscale is not up on this laptop"
   mkdir -p "$PREFIX/certs"; chmod 700 "$PREFIX/certs" 2>/dev/null
@@ -740,18 +739,14 @@ cmd_web() {
     tailscale cert --cert-file "$crt" --key-file "$key" "$name" >/dev/null 2>&1 \
       || die "tailscale cert failed (enable HTTPS for your tailnet in the admin console)"
   fi
-  # Stable across restarts so a saved bookmark or QR keeps working.
-  if [ -n "${WEB_TOKEN:-}" ]; then tok="$WEB_TOKEN"
-  else tok=$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n'); WEB_TOKEN="$tok"; save_conf; fi
-
   : > "$LOGFILE"; rm -f "$PIDFILE"
-  PM_CERT="$crt" PM_KEY="$key" PM_TOKEN="$tok" PM_PORT="$port" PM_SINK="$SINK" PM_BIND="$ip" \
+  PM_CERT="$crt" PM_KEY="$key" PM_PUBLIC_URL="https://$name:$port" PM_PORT="$port" PM_SINK="$SINK" PM_BIND="$ip" \
     PM_PIDFILE="$PIDFILE" setsid nohup python3 "$PREFIX/lib/webmic.py" >>"$LOGFILE" 2>&1 &
   local i; for i in $(seq 1 20); do [ -s "$PIDFILE" ] && break; sleep 0.25; done
   sleep 1
   running || { bad "server failed to start:"; tail -5 "$LOGFILE" | sed 's/^/      /'; rm -f "$PIDFILE"; return 1; }
 
-  local url="https://$name:$port/?token=$tok"
+  local url="https://$name:$port/"
   say ""
   ok "$LABEL ${B}listening${Z}  ${DIM}on $ip:$port (tailnet only, not public)${Z}"
   say ""
@@ -760,7 +755,7 @@ cmd_web() {
   say "  ${C}$url${Z}"
   say ""
   command -v qrencode >/dev/null && qrencode -t ANSIUTF8 -m 2 "$url"
-  say "  Then tap ${B}Start microphone${Z} and allow the mic permission."
+  say "  Run ${B}phonemic browser pair${Z} and enter its code on the phone."
   say "  Keep the page open and the screen on -- Android cuts audio from"
   say "  backgrounded tabs."
   say ""
@@ -775,17 +770,22 @@ cmd_persist() {
   python3 -c "import websockets" 2>/dev/null || die "python websockets missing (pip install --user websockets)"
   [ -f "$PREFIX/lib/webmic.py" ] || die "$PREFIX/lib/webmic.py missing -- run install.sh"
 
-  if [ -z "${WEB_TOKEN:-}" ]; then
-    WEB_TOKEN=$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n'); save_conf
-  fi
   umask 077
-  cat > "$CONF_DIR/web.env" <<EOF
-PM_TOKEN=$WEB_TOKEN
-PM_PORT=${WEB_PORT:-8444}
-PM_BIND=127.0.0.1
-PM_SINK=phonemic2
-EOF
-  chmod 600 "$CONF_DIR/web.env"
+  # Preserve the configured LAN listener and authentication paths when rerun.
+  python3 - "$CONF_DIR/web.env" "${WEB_PORT:-8444}" "${WEB_HOST:-}" <<'PYCONF'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+lines = path.read_text().splitlines() if path.exists() else []
+lines = [line for line in lines if not line.startswith('PM_TOKEN=')]
+keys = {line.split('=', 1)[0] for line in lines if '=' in line}
+for key, value in {'PM_PORT': sys.argv[2], 'PM_BIND': '127.0.0.1', 'PM_SINK': 'phonemic2'}.items():
+    if key not in keys:
+        lines.append(key + '=' + value)
+if sys.argv[3] and 'PM_PUBLIC_URL' not in keys:
+    lines.append('PM_PUBLIC_URL=https://' + sys.argv[3])
+path.write_text('\n'.join(lines) + '\n')
+path.chmod(0o600)
+PYCONF
 
   mkdir -p "$HOME/.config/systemd/user"
   cat > "$HOME/.config/systemd/user/$WEB_UNIT" <<'EOF'
@@ -799,6 +799,10 @@ Type=simple
 # Plain HTTP on loopback; a TLS-terminating tunnel sits in front.
 EnvironmentFile=%h/.config/phonemic/web.env
 ExecStart=/usr/bin/python3 %h/.local/share/phonemic/lib/webmic.py
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+UMask=0077
+LimitCORE=0
 Restart=always
 RestartSec=5s
 
@@ -822,7 +826,7 @@ EOF
   fi
   say ""
   info "Next: expose it with ${B}phonemic tunnel <hostname>${Z}, or reach it locally"
-  info "at http://127.0.0.1:${WEB_PORT:-8444}/?token=$WEB_TOKEN"
+  info "at http://127.0.0.1:${WEB_PORT:-8444}/"
 }
 
 # ---------- permanent Cloudflare tunnel ----------
@@ -892,16 +896,21 @@ EOF
   fi
 
   WEB_HOST="$host"; save_conf
-  systemctl --user start phonemic-web.service 2>/dev/null
-  local t; t=$(grep '^PM_TOKEN=' "$CONF_DIR/web.env" 2>/dev/null | cut -d= -f2)
+  python3 - "$CONF_DIR/web.env" "$host" <<'PYORIGIN'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+lines = path.read_text().splitlines() if path.exists() else []
+lines = [line for line in lines if not line.startswith('PM_PUBLIC_URL=')]
+lines.append('PM_PUBLIC_URL=https://' + sys.argv[2])
+path.write_text('\n'.join(lines) + '\n')
+path.chmod(0o600)
+PYORIGIN
+  systemctl --user restart phonemic-web.service 2>/dev/null
   say ""
   ok "Permanent URL:"
-  say "  ${C}https://$host/?token=$t${Z}"
+  say "  ${C}https://$host/${Z}"
   say ""
-  warn "This is now reachable from the public internet. The token is the only"
-  warn "thing protecting a live microphone, and it sits in the URL (so it lands"
-  warn "in browser history and any referer). Put ${B}Cloudflare Access${Z} in front of"
-  warn "$host in the Zero Trust dashboard so reaching it needs your identity."
+  info "Browser pairing is required. Run ${B}phonemic browser pair${Z} on this computer."
   say ""
 }
 
@@ -1182,6 +1191,7 @@ ${B}phonemic${Z} - use your Android phone as this laptop's microphone
   ${B}phonemic on 2${Z}         adb phone over Wi-Fi -> "PhoneMic-2"  ${DIM}(same network only)${Z}
   ${B}phonemic seed${Z}         one USB session to enable a phone for cable-free use
   ${B}phonemic web${Z}          INTERNET: phone's browser streams to us -> "PhoneMic-2"
+  ${B}phonemic browser pair|status|revoke${Z}  manage the one approved browser
   ${B}phonemic persist${Z}      run the web receiver as a service, start at boot
   ${B}phonemic tunnel HOST${Z}  permanent public URL via Cloudflare (one time)
   ${B}phonemic net${Z}          pull from a phone app     ${DIM}(same network only)${Z}
@@ -1204,6 +1214,7 @@ EOF
 load_conf; find_adb
 case "${1:-toggle}" in
   setup) cmd_setup ;;
+  browser) shift; python3 "$PREFIX/lib/webauth.py" "${@:-status}" ;;
   pair) shift; cmd_pair "${1:-}" ;;
   net) shift; cmd_net "${1:-}" "${2:-2}" ;;
   on|usb) shift; cmd_on "${1:-1}" ;;

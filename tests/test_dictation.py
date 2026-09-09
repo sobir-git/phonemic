@@ -9,9 +9,7 @@ import unittest
 from unittest.mock import patch, AsyncMock, MagicMock
 from types import SimpleNamespace
 
-spec = importlib.util.spec_from_file_location('webmic', Path(__file__).parents[1] / 'lib/webmic.py')
-webmic = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(webmic)
+from lib import webmic
 
 
 class DictationTests(unittest.IsolatedAsyncioTestCase):
@@ -87,6 +85,7 @@ class BufferedAudioTests(unittest.IsolatedAsyncioTestCase):
     async def test_stop_waits_for_buffered_speech_to_play(self):
         samples = b'\x01\x00' * (webmic.RATE // 2)
         class Phone:
+            phonemic_auth = ("test", "http://localhost")
             remote_address = None
             transport = None
             send = AsyncMock()
@@ -100,6 +99,9 @@ class BufferedAudioTests(unittest.IsolatedAsyncioTestCase):
              patch.object(webmic, 'spawn_sink', return_value=sink), \
              patch.object(webmic, 'stop_proc'), \
              patch.object(webmic, 'report', new=AsyncMock()), \
+             patch.object(webmic, 'report_herdr', new=AsyncMock()), \
+             patch.object(webmic, 'guard_session', new=AsyncMock()), \
+             patch.object(webmic.AUTH, 'valid', return_value=True), \
              patch.object(webmic, 'time', clock), \
              patch.object(webmic.asyncio, 'sleep', new=AsyncMock()) as sleep:
             await webmic.handler(Phone())

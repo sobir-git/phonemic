@@ -9,6 +9,10 @@ Type=simple
 # Plain HTTP on loopback only; Cloudflare terminates TLS at the edge.
 EnvironmentFile=%h/.config/phonemic/web.env
 ExecStart=/usr/bin/python3 %h/.local/share/phonemic/lib/webmic.py
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+UMask=0077
+LimitCORE=0
 Restart=always
 RestartSec=5s
 
