@@ -292,6 +292,8 @@ color:var(--fg);border-radius:10px;font:600 .82rem system-ui;touch-action:manipu
 #command-dialog button{padding:.7rem 1rem}
 #command-buttons{margin:0}
 #command-buttons button{overflow-wrap:anywhere;max-width:100%;touch-action:manipulation;-webkit-touch-callout:none}
+#add-command{flex:0 0 auto;width:44px;min-width:44px;height:44px;margin:0;padding:0;font-size:1.4rem;line-height:1;
+  background:var(--agent);border-color:var(--agent);color:var(--bg);border-radius:10px}
 .control-tabs{display:flex;gap:.4rem;margin:.65rem 0}
 .control-tabs button{flex:1;min-width:0}
 .control-tabs button[aria-expanded=true]{border-color:var(--agent)!important;color:var(--agent)!important}
@@ -436,7 +438,7 @@ box-shadow:0 0 0 5px #19F0A62E;transform:translateY(1px)}
       <button id=composer-tab aria-expanded=false aria-controls=composer-panel>Type a message</button>
     </div>
     <section id=command-panel hidden aria-labelledby=commands-tab>
-      <div class=command-row><div id=command-buttons class=command-row></div><button id=add-command aria-label="Add command" aria-haspopup=dialog>+</button></div>
+      <div class=command-row><div id=command-buttons class=command-row><button id=add-command aria-label="Add command" aria-haspopup=dialog>+</button></div></div>
       <div class=command-row><button id=new-workspace>New space</button><button id=notifications aria-pressed=false>Completion alerts: off</button></div>
       <p id=notification-status class=command-hint role=status></p>
       <div class=command-row><button data-pane-action=split>New pane</button><button data-pane-action=close>Close pane</button></div>
@@ -1063,7 +1065,7 @@ try{
   }
 }catch{}
 function renderCommands(){
-  const list=$('command-buttons');list.replaceChildren();
+  const list=$('command-buttons');const add=$('add-command');list.replaceChildren();
   for(const command of savedCommands){
     const button=document.createElement('button');button.type='button';button.textContent=command;
     let timer=null,held=false,startX=0,startY=0;
@@ -1087,6 +1089,7 @@ function renderCommands(){
     };
     list.append(button);
   }
+  list.append(add);
   paintRemote();
 }
 function storeCommands(next){
