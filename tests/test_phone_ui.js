@@ -185,6 +185,9 @@ function browser() {
     assert.equal(run("paneSelect.value"),'w2:p2');
     run("inventory=[{id:'w2:p2',workspace:'kolokoon_back',agent:'codex',title:'chatbot',state:'idle'}];renderPicked()");
     assert.equal(run("$('picked-detail').textContent"),'codex · chatbot');
+    run("applyHerdrInventory({panes:[{id:'w3:p1',workspace:'fire-notes',agent:'codex',title:'1',state:'done',focused:true}]})");
+    assert.equal(run("paneSelect.value"),'w3:p1');
+    assert.equal(run("$('picked-dot').className"),'agent-dot done');
   }
   {
     const run=browser();
@@ -206,5 +209,5 @@ function browser() {
     await run('refreshOutput()');
     assert.equal(run('outputText'),null);
   }
-  console.log('15 phone interaction checks passed');
+  console.log('16 phone interaction checks passed');
 })().catch(error => {console.error(error); process.exitCode=1;});

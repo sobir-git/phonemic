@@ -282,3 +282,7 @@ Preview reads pause while the page is hidden or the microphone is capturing.
 The viewer shows Herdr's visible screen, not a permanent conversation archive.
 Terminal content is rendered as text with color spans; terminal HTML and links
 are never executed. Reads are limited to 160 lines and 120,000 characters.
+
+Herdr inventory changes are watched by the receiver and pushed over the phone
+WebSocket when the snapshot changes. This keeps pane status, focus, labels and
+the selected preview current without relying only on the browser's timer.

@@ -498,6 +498,7 @@ async function connectSocket(){
   const socket=ws;
   ws.binaryType='arraybuffer';
   ws.onmessage=e=>{ if(ws!==socket) return; try{ const m=JSON.parse(e.data);
+    if(m.type==='herdr-update'){ applyHerdrInventory(m.result); return; }
     if(m.type==='herdr'){
       const pending=herdrPending.get(m.id);
       if(pending){herdrPending.delete(m.id);m.error?pending.reject(new Error(m.error)):pending.resolve(m.result)}
@@ -680,8 +681,7 @@ async function remoteAction(command){
   try{
     const result=await herdrCommand(command);
     if(command.action==='list'){
-      syncFocusedPane(result.panes);
-      renderPicked();if(picker.open) renderPicker();
+      applyHerdrInventory(result);
       remoteStatus.textContent=result.panes.length?'':'No panes open in Herdr';
     }else if(command.action==='focus'){
       paneSelect.value=command.pane;renderPicked();picker.close();
@@ -703,6 +703,11 @@ function syncFocusedPane(panes){
   const focused=inventory.find(p=>p.focused);
   if(focused) paneSelect.value=focused.id;
   else if(!inventory.some(p=>p.id===paneSelect.value)) paneSelect.value='';
+}
+function applyHerdrInventory(result){
+  if(!result||!Array.isArray(result.panes)) return;
+  syncFocusedPane(result.panes);
+  renderPicked();if(picker.open) renderPicker();
 }
 function renderPicked(){
   const pane=inventory.find(p=>p.id===paneSelect.value);
@@ -880,8 +885,7 @@ setInterval(()=>{
   if(document.hidden||remoteBusy||starting||talking||capturing||!ready) return;
   herdrCommand({action:'list'}).then(result=>{
     if(remoteBusy||starting||talking||capturing) return;
-    syncFocusedPane(result.panes);
-    renderPicked();paintRemote();if(picker.open) renderPicker();
+    applyHerdrInventory(result);paintRemote();
   }).catch(()=>{});
 },5000);
 for(const button of remoteButtons){
@@ -986,6 +990,29 @@ async def report(ws, state):
         except Exception:
             return
         await asyncio.sleep(0.25)
+
+async def report_herdr(ws, herdr):
+    """Push changed Herdr inventory over the phone socket.
+
+    Herdr's Unix API exposes snapshots, not a long-lived stream. Keep this
+    watcher independent from microphone traffic and the browser's timers so
+    status changes reach the phone promptly even when its page is throttled.
+    """
+    previous = None
+    while True:
+        try:
+            inventory = await herdr.control({"action": "list"})
+            current = json.dumps(inventory, sort_keys=True, separators=(",", ":"))
+            if current != previous:
+                await ws.send(json.dumps({"type": "herdr-update", "result": inventory}))
+                previous = current
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # The normal command path reports errors to the user. A transient
+            # watcher failure should simply retry on the next pass.
+            pass
+        await asyncio.sleep(1)
 
 def stop_proc(p):
     """Make sure the sink writer really dies.
@@ -1172,6 +1199,7 @@ async def handler(ws):
     state = {"n": 0}
     playback_until = 0.0
     task = asyncio.create_task(report(ws, state))
+    herdr_task = asyncio.create_task(report_herdr(ws, herdr))
     t0 = time.time()
     try:
         async for msg in ws:
@@ -1232,6 +1260,7 @@ async def handler(ws):
         print("stream ended:", e, flush=True)
     finally:
         task.cancel()
+        herdr_task.cancel()
         await dictation.close()
         stop_proc(ff)
         print(f"phone disconnected after {time.time()-t0:.0f}s "
