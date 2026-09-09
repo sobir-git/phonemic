@@ -115,12 +115,15 @@ class HerdrTests(unittest.IsolatedAsyncioTestCase):
             {'workspaces': [{'workspace_id': 'w1', 'label': 'Project'}]},
             {'panes': [{'workspace_id': 'w1', 'pane_id': 'w1:p1',
                         'terminal_title_stripped': 'Agent', 'focused': True, 'agent': 'codex', 'agent_status': 'working',
-                        'agent_session': {'private': 'not needed'}}]},
+                        'agent_session': {'private': 'not needed'}, 'tab_id': 'w1:t1'}]},
+            {'tabs': [{'tab_id': 'w1:t1', 'label': 'chatbot'}]},
         ])
         result = await remote.control({'action': 'list'})
         self.assertEqual(result, {'panes': [{'id': 'w1:p1', 'workspace': 'Project',
-                                           'title': 'Agent', 'focused': True, 'workspace_id': 'w1',
+                                           'title': 'chatbot', 'focused': True, 'workspace_id': 'w1',
                                            'workspace_state': 'unknown', 'state': 'working', 'agent': 'codex'}]})
+        self.assertEqual([call.args for call in remote.request.await_args_list], [
+            ('workspace.list', {}), ('pane.list', {}), ('tab.list', {})])
 
     async def test_modifiers_and_keys_target_explicit_pane(self):
         remote = webmic.Herdr()

@@ -181,6 +181,10 @@ function browser() {
     assert.equal(run("paneDetail({workspace:'phonemic',agent:'codex',title:'⠙ phonemic | Working'})"),'codex');
     assert.equal(run("paneDetail({workspace:'phonemic',agent:'codex',title:'Ready'})"),'codex');
     assert.equal(run("paneDetail({workspace:'phonemic',agent:'codex',title:'chatbot | Idle'})"),'codex · chatbot');
+    run("syncFocusedPane([{id:'w1:p1',focused:false},{id:'w2:p2',focused:true}])");
+    assert.equal(run("paneSelect.value"),'w2:p2');
+    run("inventory=[{id:'w2:p2',workspace:'kolokoon_back',agent:'codex',title:'chatbot',state:'idle'}];renderPicked()");
+    assert.equal(run("$('picked-detail').textContent"),'codex · chatbot');
   }
   {
     const run=browser();
@@ -202,5 +206,5 @@ function browser() {
     await run('refreshOutput()');
     assert.equal(run('outputText'),null);
   }
-  console.log('14 phone interaction checks passed');
+  console.log('15 phone interaction checks passed');
 })().catch(error => {console.error(error); process.exitCode=1;});

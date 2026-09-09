@@ -680,8 +680,7 @@ async function remoteAction(command){
   try{
     const result=await herdrCommand(command);
     if(command.action==='list'){
-      inventory=result.panes;
-      if(!inventory.some(p=>p.id===paneSelect.value)) paneSelect.value=(inventory.find(p=>p.focused)||{}).id||'';
+      syncFocusedPane(result.panes);
       renderPicked();if(picker.open) renderPicker();
       remoteStatus.textContent=result.panes.length?'':'No panes open in Herdr';
     }else if(command.action==='focus'){
@@ -699,10 +698,16 @@ async function remoteAction(command){
 refreshPanes.onclick=()=>remoteAction({action:'list'});
 const stateNames={idle:'Idle',working:'Working',done:'Done',blocked:'Needs input',unknown:'Terminal'};
 function agentState(value){return Object.hasOwn(stateNames,value)?value:'unknown'}
+function syncFocusedPane(panes){
+  inventory=Array.isArray(panes)?panes:[];
+  const focused=inventory.find(p=>p.focused);
+  if(focused) paneSelect.value=focused.id;
+  else if(!inventory.some(p=>p.id===paneSelect.value)) paneSelect.value='';
+}
 function renderPicked(){
   const pane=inventory.find(p=>p.id===paneSelect.value);
   $('picked-name').textContent=pane?pane.workspace:'Choose an agent';
-  $('picked-detail').textContent=pane?(pane.agent||'terminal'):'Spaces & agents on your laptop';
+  $('picked-detail').textContent=pane?paneDetail(pane):'Spaces & agents on your laptop';
   $('picked-dot').className='agent-dot '+agentState(pane?.state);
   selectOutputPane(paneSelect.value);
 }
@@ -875,8 +880,7 @@ setInterval(()=>{
   if(document.hidden||remoteBusy||starting||talking||capturing||!ready) return;
   herdrCommand({action:'list'}).then(result=>{
     if(remoteBusy||starting||talking||capturing) return;
-    inventory=result.panes;
-    if(!inventory.some(p=>p.id===paneSelect.value)) paneSelect.value='';
+    syncFocusedPane(result.panes);
     renderPicked();paintRemote();if(picker.open) renderPicker();
   }).catch(()=>{});
 },5000);
@@ -1035,17 +1039,20 @@ class Herdr:
     async def control(self, message):
         action = message.get("action")
         if action == "list":
-            workspaces, panes = await asyncio.gather(
-                self.request("workspace.list", {}), self.request("pane.list", {}))
+            workspaces, panes, tabs = await asyncio.gather(
+                self.request("workspace.list", {}), self.request("pane.list", {}),
+                self.request("tab.list", {}))
             labels = {w["workspace_id"]: w["label"] for w in workspaces["workspaces"]}
             states = {w["workspace_id"]: w.get("agent_status", "unknown") for w in workspaces["workspaces"]}
+            tab_labels = {t["tab_id"]: t.get("label", "") for t in tabs.get("tabs", [])}
             return {"panes": [{"id": p["pane_id"],
                                "workspace": labels.get(p["workspace_id"], p["workspace_id"]),
                                "workspace_id": p["workspace_id"],
                                "workspace_state": states.get(p["workspace_id"], "unknown"),
                                "state": p.get("agent_status", "unknown"),
                                "agent": p.get("agent", "terminal"),
-                               "title": p.get("terminal_title_stripped") or p.get("agent") or "Terminal",
+                               "title": tab_labels.get(p.get("tab_id")) or
+                                         p.get("terminal_title_stripped") or p.get("agent") or "Terminal",
                                "focused": p.get("focused", False)} for p in panes["panes"]]}
         pane = message.get("pane")
         if not isinstance(pane, str) or not pane or len(pane) > 128:
