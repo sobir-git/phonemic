@@ -16,9 +16,19 @@ The receiver and installer target **Linux with PipeWire**, used on Ubuntu 24.04
 with Android phones. Windows and macOS need an audio/backend and service port;
 they are not supported out of the box. iPhone browser behavior is untested.
 
-Herdr controls and the separate `voice-dictation` integration are optional.
 The trackpad currently requires X11 and `xdotool`. Browser notifications and
 haptics depend on browser support; background operation is not guaranteed.
+
+## Companion projects
+
+PhoneMic's default companions are:
+
+- [Voice Dictation](https://github.com/sobir-git/voice-dictation): desktop
+  speech-to-text, triggered from the phone with **Trigger laptop dictation**.
+- [Herdr](https://github.com/herdrdev/herdr): terminal workspaces, agent panes,
+  and the remote controls in the phone UI.
+
+Both are optional for microphone streaming and can be replaced or adapted.
 
 ## Setup
 
