@@ -9,7 +9,7 @@ function browser() {
     document: {
       getElementById(id) {
         if (!elements.has(id)) elements.set(id, {
-          value: id === 'q' ? '24000:1' : '', checked: false, style: {},
+          textContent: id === "connection-config" ? '{"local":""}' : "", setAttribute(k,v){this[k]=v;}, value: id === 'q' ? '24000:1' : '', checked: false, style: {},
           classList: {add(){}, remove(){}, toggle(){}},
           handlers:{}, addEventListener(type,fn){this.handlers[type]=fn;}, getContext(){return {};},
         });
@@ -182,5 +182,25 @@ function browser() {
     assert.equal(run("paneDetail({workspace:'phonemic',agent:'codex',title:'Ready'})"),'codex');
     assert.equal(run("paneDetail({workspace:'phonemic',agent:'codex',title:'chatbot | Idle'})"),'codex · chatbot');
   }
-  console.log('12 phone interaction checks passed');
+  {
+    const run=browser();
+    run('var esc=String.fromCharCode(27)');
+    assert.equal(run("terminalRuns(esc+'[31mRed'+esc+'[0m plain')[0].style.fg"),'#fa7777');
+    assert.equal(run("terminalRuns(esc+'[38;2;1;2;3mRGB')[0].style.fg"),'rgb(1,2,3)');
+    assert.equal(run("terminalRuns(esc+']8;;https://example.test'+String.fromCharCode(7)+'<script>text</script>'+esc+']8;;'+String.fromCharCode(7)).map(r=>r.text).join('')"),'<script>text</script>');
+  }
+  {
+    const run=browser();
+    run(`outputPane='w1:p1';var reply,painted=null;
+      renderTerminal=text=>painted=text;
+      herdrCommand=()=>new Promise(r=>reply=r);`);
+    const pending=run('refreshOutput()');
+    run("selectOutputPane('w2:p1');reply({pane:'w1:p1',text:'Old pane'})");
+    await pending;
+    assert.equal(run('painted'),null);
+    run("setOutputFollow(false);herdrCommand=()=>{throw Error('Paused reader must not poll')}");
+    await run('refreshOutput()');
+    assert.equal(run('outputText'),null);
+  }
+  console.log('14 phone interaction checks passed');
 })().catch(error => {console.error(error); process.exitCode=1;});

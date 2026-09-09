@@ -12,6 +12,7 @@ PM_CERT/PM_KEY to serve HTTPS directly. getUserMedia requires a secure context
 either way.
 """
 import asyncio, json, os, pathlib, ssl, subprocess, sys, signal, time
+from contextlib import AsyncExitStack
 
 SINK   = os.environ.get("PM_SINK", "phonemic2")
 SRC    = os.environ.get("PM_SRC", SINK + "_src")
@@ -20,6 +21,11 @@ PORT   = int(os.environ.get("PM_PORT", "8444"))
 BIND   = os.environ.get("PM_BIND", "127.0.0.1")
 CERT   = os.environ.get("PM_CERT", "")
 KEY    = os.environ.get("PM_KEY", "")
+LOCAL_URL = os.environ.get("PM_LOCAL_URL", "")
+LOCAL_BIND = os.environ.get("PM_LOCAL_BIND", "")
+LOCAL_PORT = int(os.environ.get("PM_LOCAL_PORT", "8445"))
+LOCAL_CERT = os.environ.get("PM_LOCAL_CERT", "")
+LOCAL_KEY = os.environ.get("PM_LOCAL_KEY", "")
 ASSETS = pathlib.Path(os.environ.get("PM_ASSETS",
                                      pathlib.Path(__file__).resolve().parent.parent / "assets"))
 RATE   = int(os.environ.get("PM_RATE", "48000"))
@@ -138,6 +144,11 @@ header h1{margin:0;font-size:.95rem;font-weight:600;letter-spacing:.03em}
 #panel[hidden]{display:none}
 #panel{border-bottom:1px solid var(--line);background:var(--panel);
 padding:.9rem 1.1rem;display:flex;flex-direction:column;gap:.85rem;font-size:.85rem}
+#connection-card{border:1px solid #435166;border-radius:12px;padding:1rem;background:#151e29}
+#connection-card[hidden]{display:none}
+#connection-card p{color:var(--dim);line-height:1.5;margin:.5rem 0 .8rem}
+#connection-card button{background:#26d991;color:#06120c;border:0;border-radius:8px;padding:.7rem 1rem;font:inherit;font-weight:650;width:100%}
+#connection-address{display:block;color:var(--dim);overflow-wrap:anywhere;margin-top:.6rem}
 .row{display:flex;align-items:center;justify-content:space-between;gap:1rem}
 .row label{color:var(--dim)}
 select{background:#20242a;color:var(--fg);border:1px solid #2b3037;border-radius:8px;
@@ -222,6 +233,28 @@ color:var(--fg);border-radius:7px;font:500 .8rem system-ui;touch-action:manipula
 #remote-status:empty{display:none}
 #remote-status{font-size:.72rem;color:var(--dim);margin-top:.5rem;min-height:1.1em}
 
+
+#output-viewer{margin-top:.75rem;border:1px solid #303e51;border-radius:10px;overflow:hidden;background:#080c12}
+.output-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.35rem .6rem;border-bottom:1px solid #293344}
+.output-toolbar h2{margin:0;font-size:.75rem;font-weight:600;color:#c4d1e4}
+.output-actions{display:flex;align-items:center;gap:.3rem}
+#output-viewer button{display:flex;align-items:center;justify-content:center;gap:.3rem;min-height:32px;
+  padding:.3rem .45rem;border:1px solid transparent;border-radius:6px;background:transparent;color:#c5d3e8;font:500 .7rem system-ui}
+#output-viewer button[aria-pressed=true]{color:#60edb8;background:#0a2b22;border-color:#22694f}
+#output-viewer .icon{width:16px;height:16px}
+#output-scroll{height:160px;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y;background:#080c12;scrollbar-color:#526580 #080c12}
+#terminal-output{margin:0;padding:.6rem .75rem;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
+  color:#e8eff9;white-space:pre;min-height:100%;width:max-content;min-width:100%;user-select:text;-webkit-user-select:text}
+#output-error{font-size:.7rem;padding:.35rem .65rem;color:#ffaaa1;border-top:1px solid #293344}
+#output-error:empty{display:none}
+#output-dialog{position:fixed;inset:0;margin:0;width:100%;max-width:100%;height:100dvh;max-height:100dvh;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  border:0;background:#080c12;color:var(--fg)}
+#output-dialog #output-viewer{height:100%;margin:0;border:0;border-radius:0;display:flex;flex-direction:column}
+#output-dialog .output-toolbar{padding:.7rem}
+#output-dialog #output-scroll{flex:1;height:auto;min-height:0}
+#output-dialog::backdrop{background:#05070be8}
+
 /* bottom: the button */
 footer{display:flex;justify-content:center;padding:0 1.2rem clamp(1.2rem,6vh,4rem)}
 #talk{width:min(48vw,160px);aspect-ratio:1;border-radius:50%;border:0;
@@ -231,6 +264,8 @@ box-shadow:0 0 0 0 rgba(46,190,130,.4);transition:background .12s,color .12s,box
 touch-action:none;-webkit-touch-callout:none}
 #talk.live{background:var(--green);color:#04210f;box-shadow:0 0 0 16px rgba(46,190,130,.11);transform:scale(1.03)}
 #talk.busy{opacity:.55}
+footer{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 20%);padding-top:.65rem;padding-bottom:1rem;z-index:2}
+#talk{width:120px}
 @media(max-height:740px){
   main{justify-content:flex-start;padding:.5rem;gap:.3rem}
   #remote{padding:.6rem;margin-bottom:0}
@@ -242,13 +277,19 @@ touch-action:none;-webkit-touch-callout:none}
 }
 </style></head><body>
 
-<svg aria-hidden=true focusable=false style="position:absolute;width:0;height:0;overflow:hidden"><defs><symbol id="icon-up" viewBox="0 0 24 24"><path d="M6 11l6-6 6 6M12 5v14"/></symbol><symbol id="icon-down" viewBox="0 0 24 24"><path d="m6 13 6 6 6-6M12 5v14"/></symbol><symbol id="icon-left" viewBox="0 0 24 24"><path d="m11 6-6 6 6 6M5 12h14"/></symbol><symbol id="icon-right" viewBox="0 0 24 24"><path d="m13 6 6 6-6 6M5 12h14"/></symbol><symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol><symbol id="icon-chevron-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol><symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol><symbol id="icon-backspace" viewBox="0 0 24 24"><path d="M9 5h11v14H9l-7-7 7-7Z"/><path d="m11 9 6 6m-6 0 6-6"/></symbol><symbol id="icon-enter" viewBox="0 0 24 24"><path d="M20 5v7a3 3 0 0 1-3 3H4m5-5-5 5 5 5"/></symbol><symbol id="icon-bottom" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></symbol><symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 7h7m6 0h3M4 17h3m6 0h7"/><circle cx="14" cy="7" r="3"/><circle cx="10" cy="17" r="3"/></symbol></defs></svg>
+<svg aria-hidden=true focusable=false style="position:absolute;width:0;height:0;overflow:hidden"><defs><symbol id="icon-up" viewBox="0 0 24 24"><path d="M6 11l6-6 6 6M12 5v14"/></symbol><symbol id="icon-down" viewBox="0 0 24 24"><path d="m6 13 6 6 6-6M12 5v14"/></symbol><symbol id="icon-left" viewBox="0 0 24 24"><path d="m11 6-6 6 6 6M5 12h14"/></symbol><symbol id="icon-right" viewBox="0 0 24 24"><path d="m13 6 6 6-6 6M5 12h14"/></symbol><symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol><symbol id="icon-chevron-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol><symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol><symbol id="icon-backspace" viewBox="0 0 24 24"><path d="M9 5h11v14H9l-7-7 7-7Z"/><path d="m11 9 6 6m-6 0 6-6"/></symbol><symbol id="icon-enter" viewBox="0 0 24 24"><path d="M20 5v7a3 3 0 0 1-3 3H4m5-5-5 5 5 5"/></symbol><symbol id="icon-bottom" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></symbol><symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 7h7m6 0h3M4 17h3m6 0h7"/><circle cx="14" cy="7" r="3"/><circle cx="10" cy="17" r="3"/></symbol><symbol id="icon-expand" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/></symbol><symbol id="icon-collapse" viewBox="0 0 24 24"><path d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"/></symbol></defs></svg>
 <header>
   <h1>PhoneMic</h1>
   <button id=gear aria-label=Settings><svg class=icon aria-hidden=true focusable=false><use href="#icon-settings"/></svg></button>
 </header>
 
 <div id=panel hidden>
+  <section id=connection-card hidden aria-label="Connection">
+    <strong id=connection-title>Direct over Wi-Fi</strong>
+    <p id=connection-help>On the same Wi-Fi as your laptop? Switch to a direct connection for less network delay. No Tailscale needed.</p>
+    <button id=switch-connection>Use Wi-Fi connection</button>
+    <small id=connection-address></small>
+  </section>
   <div class=row><label for=q>Quality</label>
     <select id=q>
       <option value="48000:0">Studio · 48 kHz raw</option>
@@ -278,6 +319,18 @@ touch-action:none;-webkit-touch-callout:none}
       <span id=picked-detail class=context-detail>Spaces &amp; agents on your laptop</span></span>
       <span class=context-chevron aria-hidden=true><svg class=icon aria-hidden=true focusable=false><use href="#icon-chevron-down"/></svg></span>
     </button>
+    <div id=output-home>
+      <section id=output-viewer aria-label="Agent terminal output">
+        <div class=output-toolbar><h2>Live output</h2><div class=output-actions>
+          <button id=follow-output aria-pressed=true aria-label="Follow latest output"><svg class=icon aria-hidden=true focusable=false><use href="#icon-bottom"/></svg><span>Follow</span></button>
+          <button id=expand-output aria-label="Expand terminal output"><svg class=icon aria-hidden=true focusable=false><use id=expand-output-icon href="#icon-expand"/></svg></button>
+        </div></div>
+        <div id=output-scroll tabindex=0 aria-label="Terminal screen, scroll to read">
+          <pre id=terminal-output>Select a pane to see its output.</pre>
+        </div>
+        <div id=output-error role=status></div>
+      </section>
+    </div>
     <div class=remote-tools aria-label="Modifiers and shortcuts">
       <button data-key=esc>Esc</button><button data-key=tab>Tab</button>
       <button data-mod=ctrl aria-pressed=false>Ctrl</button><button data-mod=alt aria-pressed=false>Alt</button>
@@ -312,6 +365,7 @@ touch-action:none;-webkit-touch-callout:none}
 
 <footer><button id=talk>Touch to talk</button></footer>
 
+<dialog id=output-dialog aria-label="Expanded terminal output"></dialog>
 <dialog id=pane-picker aria-labelledby=picker-heading>
   <div class=picker-handle></div>
   <div class=picker-heading><div><h2 id=picker-heading>Herdr</h2><p id=picker-summary>Live Herdr sessions</p></div>
@@ -322,6 +376,7 @@ touch-action:none;-webkit-touch-callout:none}
   </div>
   <div id=picker-list role=tabpanel></div>
 </dialog>
+<script id=connection-config type="application/json">__CONNECTION_CONFIG__</script>
 <script>
 const $=i=>document.getElementById(i);
 const talk=$('talk'),st=$('st'),lap=$('lap'),hf=$('hf'),dis=$('dis'),q=$('q'),
@@ -333,11 +388,45 @@ const paneSelect=$('panes'),remoteStatus=$('remote-status'),refreshPanes=$('refr
 const remoteButtons=Array.from(document.querySelectorAll('#remote [data-key],#remote [data-mod],#remote [data-scroll]'));
 let inventory=[],pickerView='agents',workspaceFilter=null,queuedPane=null;
 const picker=$('pane-picker');
+const outputViewer=$('output-viewer'),outputScroll=$('output-scroll'),terminalOutput=$('terminal-output');
+const outputDialog=$('output-dialog'),followOutput=$('follow-output');
+let outputPane='',outputText=null,outputBusy=false,outputFollow=true,outputGeneration=0;
 let herdrPending=new Map(),herdrSerial=0,remoteBusy=false,modifiers=new Set(),connectionPromise=null;
 
 try{ const v=localStorage.getItem('pm.q'); if(v) q.value=v; }catch(e){}
 try{ hf.checked = localStorage.getItem('pm.hf')==='1'; }catch(e){}
 try{ dictation.checked = localStorage.getItem('pm.dictation')==='1'; }catch(e){}
+// Carry only preferences across origins; each origin asks for its own mic permission.
+try{
+  const handoff=new URLSearchParams(location.hash.slice(1));
+  if(handoff.has('pmq')){
+    if(['48000:0','24000:1','16000:1'].includes(handoff.get('pmq')))q.value=handoff.get('pmq');
+    hf.checked=handoff.get('pmhf')==='1';dictation.checked=handoff.get('pmd')==='1';
+    localStorage.setItem('pm.q',q.value);localStorage.setItem('pm.hf',hf.checked?'1':'0');
+    localStorage.setItem('pm.dictation',dictation.checked?'1':'0');
+    history.replaceState(null,'',location.pathname+location.search);
+  }
+}catch(e){}
+function setupConnection(){
+  const config=JSON.parse($('connection-config').textContent);
+  if(!config.local)return;
+  const local=new URL(config.local);
+  const onLaptop=location.origin===local.origin;
+  const target=onLaptop?config.public:config.local;
+  $('connection-card').hidden=false;
+  $('connection-title').textContent=onLaptop?'Direct Wi-Fi connection':'Direct over Wi-Fi';
+  if(onLaptop)$('connection-help').textContent='Connected straight to your laptop over the local network. Keep both devices on the same Wi-Fi.';
+  $('connection-address').textContent=local.host;
+  const button=$('switch-connection');button.hidden=!target;
+  button.textContent=onLaptop?'Use internet connection':'Use Wi-Fi connection';
+  button.onclick=()=>{
+    if(talking||starting||capturing){$('connection-help').textContent='Finish recording before switching connections.';return;}
+    const next=new URL(target);next.search=location.search;
+    next.hash=new URLSearchParams({pmq:q.value,pmhf:hf.checked?'1':'0',pmd:dictation.checked?'1':'0'}).toString();
+    location.assign(next.href);
+  };
+}
+setupConnection();
 const quality=()=>{ const [r,pr]=q.value.split(':'); return {rate:+r, proc:pr==='1'}; };
 const say=(t,c)=>{ st.innerHTML='<span class="dot '+(c||'')+'"></span>'+t; };
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
@@ -557,6 +646,7 @@ function end(){
 }
 function teardown(msg,c){
   pressed=false; ready=false; connecting=false; talking=false; micOff();
+  outputGeneration++;if(outputPane)$('output-error').textContent='Disconnected — showing the last screen';
   if(dictationWait){ dictationWait.reject(new Error("Computer disconnected")); dictationWait=null; }
   for(const pending of herdrPending.values()) pending.reject(new Error('Computer disconnected'));
   herdrPending.clear();
@@ -604,7 +694,7 @@ async function remoteAction(command){
   }catch(error){
     if(command.action==='focus'){renderPicked();$('picker-summary').textContent=error.message;}
     remoteStatus.textContent=error.message;
-  }finally{remoteBusy=false;paintRemote();if(queuedPane){const id=queuedPane;queuedPane=null;choosePane(id)}}
+  }finally{remoteBusy=false;paintRemote();if(command.action==='focus'||command.action==='scroll'||command.action==='key') refreshOutput(true);if(queuedPane){const id=queuedPane;queuedPane=null;choosePane(id)}}
 }
 refreshPanes.onclick=()=>remoteAction({action:'list'});
 const stateNames={idle:'Idle',working:'Working',done:'Done',blocked:'Needs input',unknown:'Terminal'};
@@ -614,7 +704,116 @@ function renderPicked(){
   $('picked-name').textContent=pane?pane.workspace:'Choose an agent';
   $('picked-detail').textContent=pane?(pane.agent||'terminal'):'Spaces & agents on your laptop';
   $('picked-dot').className='agent-dot '+agentState(pane?.state);
+  selectOutputPane(paneSelect.value);
 }
+// Terminal output is untrusted: create text nodes, never HTML or clickable links.
+const ansiColors=['#202936','#fa7777','#72dc99','#f2d675','#85b5ff','#d6a0f4','#73dfe4','#dbe5f3',
+  '#8d9aaf','#ff9999','#98f1b5','#ffeb94','#adcfff','#e7baff','#a0f0f2','#ffffff'];
+function terminalColor(index){
+  if(index<16) return ansiColors[index];
+  if(index<232){const n=index-16,v=[0,95,135,175,215,255];return 'rgb('+[v[Math.floor(n/36)],v[Math.floor(n/6)%6],v[n%6]].join(',')+')'}
+  const v=8+(index-232)*10;return 'rgb('+[v,v,v].join(',')+')';
+}
+function terminalRuns(text){
+  const runs=[];let style={},buffer='';
+  function flush(){if(buffer){runs.push({text:buffer,style:{...style}});buffer=''}}
+  function sgr(params){
+    const codes=(params||'0').split(/[;:]/).map(Number);
+    for(let i=0;i<codes.length;i++){
+      const c=codes[i];
+      if(c===0) style={};
+      else if(c===1) style.bold=true;
+      else if(c===22) style.bold=false;
+      else if(c===4) style.underline=true;
+      else if(c===24) style.underline=false;
+      else if(c===7) style.reverse=true;
+      else if(c===27) style.reverse=false;
+      else if(c===39) delete style.fg;
+      else if(c===49) delete style.bg;
+      else if(c>=30&&c<=37) style.fg=ansiColors[c-30];
+      else if(c>=90&&c<=97) style.fg=ansiColors[c-90+8];
+      else if(c>=40&&c<=47) style.bg=ansiColors[c-40];
+      else if(c>=100&&c<=107) style.bg=ansiColors[c-100+8];
+      else if(c===38||c===48){
+        const target=c===38?'fg':'bg';
+        if(codes[i+1]===5&&Number.isInteger(codes[i+2])&&codes[i+2]>=0&&codes[i+2]<=255){style[target]=terminalColor(codes[i+2]);i+=2}
+        else if(codes[i+1]===2&&codes.slice(i+2,i+5).length===3&&codes.slice(i+2,i+5).every(v=>Number.isInteger(v)&&v>=0&&v<=255)){
+          style[target]='rgb('+codes.slice(i+2,i+5).join(',')+')';i+=4;
+        }
+      }
+    }
+  }
+  for(let i=0;i<text.length;i++){
+    const c=text.charCodeAt(i);
+    if(c===27){
+      flush();
+      if(text[i+1]==='['){
+        let end=i+2;while(end<text.length&&(text.charCodeAt(end)<64||text.charCodeAt(end)>126))end++;
+        if(text[end]==='m') sgr(text.slice(i+2,end));i=end;
+      }else if(text[i+1]===']'||text[i+1]==='P'){
+        i+=2;while(i<text.length&&text.charCodeAt(i)!==7&&!(text.charCodeAt(i)===27&&text.charCodeAt(i+1)===92))i++;
+        if(text.charCodeAt(i)===27)i++;
+      }else{i++;}
+    }else if(c===10||c===9||c>=32&&c!==127){buffer+=text[i];}
+  }
+  flush();return runs;
+}
+function renderTerminal(text){
+  const fragment=document.createDocumentFragment();
+  for(const run of terminalRuns(text)){
+    const span=document.createElement('span'),style=run.style;span.textContent=run.text;
+    if(style.fg)span.style.color=style.fg;
+    if(style.bg)span.style.backgroundColor=style.bg;
+    if(style.bold)span.style.fontWeight='700';
+    if(style.underline)span.style.textDecoration='underline';
+    if(style.reverse){span.style.color=style.bg||'#080c12';span.style.backgroundColor=style.fg||'#e8eff9'}
+    fragment.append(span);
+  }
+  terminalOutput.replaceChildren(fragment);
+}
+function setOutputFollow(value){
+  outputFollow=value;followOutput.setAttribute('aria-pressed',String(value));
+}
+function selectOutputPane(pane){
+  if(outputPane===pane)return;
+  outputPane=pane;outputGeneration++;outputText=null;setOutputFollow(true);
+  terminalOutput.textContent=pane?'Loading terminal…':'Select a pane to see its output.';
+  $('output-error').textContent='';
+}
+async function refreshOutput(force=false){
+  if(outputBusy||!outputPane||!ready||document.hidden||starting||talking||capturing||remoteBusy||(!outputFollow&&!force))return;
+  outputBusy=true;
+  const pane=outputPane,generation=outputGeneration;
+  try{
+    const result=await herdrCommand({action:'read',pane});
+    if(outputPane!==pane||generation!==outputGeneration||(!outputFollow&&!force))return;
+    if(result.pane!==pane||typeof result.text!=='string')throw new Error('Invalid terminal output');
+    if(result.text!==outputText){
+      outputText=result.text;renderTerminal(result.text||'This pane has no output yet.');
+    }
+    if(outputFollow)outputScroll.scrollTop=outputScroll.scrollHeight;
+    $('output-error').textContent=result.truncated?'Showing the available screen snapshot.':'';
+  }catch(error){if(outputPane===pane&&generation===outputGeneration)$('output-error').textContent='Output unavailable: '+error.message;}
+  finally{outputBusy=false;}
+}
+followOutput.onclick=()=>{setOutputFollow(!outputFollow);if(outputFollow)refreshOutput(true)};
+// Pause on reading gestures rather than snapping the reader back to the bottom.
+outputScroll.addEventListener('wheel',e=>{if(e.deltaY<0)setOutputFollow(false)},{passive:true});
+outputScroll.addEventListener('touchstart',()=>setOutputFollow(false),{passive:true});
+outputScroll.addEventListener('pointerdown',()=>setOutputFollow(false));
+outputScroll.addEventListener('keydown',e=>{if(['ArrowUp','PageUp','Home'].includes(e.key))setOutputFollow(false)});
+$('expand-output').onclick=()=>{
+  if(outputDialog.open){outputDialog.close();return;}
+  outputDialog.append(outputViewer);outputDialog.showModal();
+  $('expand-output-icon').setAttribute('href','#icon-collapse');
+  $('expand-output').setAttribute('aria-label','Close expanded output');
+};
+outputDialog.addEventListener('close',()=>{
+  $('output-home').append(outputViewer);$('expand-output-icon').setAttribute('href','#icon-expand');
+  $('expand-output').setAttribute('aria-label','Expand terminal output');
+});
+setInterval(()=>refreshOutput(),1000);
+
 function paneDetail(pane){
   const agent=pane.agent||'terminal';
   const title=(pane.title||'').replace(/^[\\s\\u2800-\\u28ff✳✻✽✶✢◐◓◑◒⏺●]+/u,'')
@@ -758,7 +957,8 @@ def process_request(conn, request):
         return manifest(TOKEN)
     if base == "/ws":
         return None                       # proceed with the websocket handshake
-    body = PAGE.replace("__Q__", f"?token={TOKEN}" if TOKEN else "").encode()
+    config = json.dumps({"local": LOCAL_URL, "public": os.environ.get("PM_PUBLIC_URL", "")}).replace("<", "\\u003c")
+    body = PAGE.replace("__Q__", f"?token={TOKEN}" if TOKEN else "").replace("__CONNECTION_CONFIG__", config).encode()
     return Response(200, "OK", Headers({"Content-Type": "text/html; charset=utf-8",
                                         "Content-Length": str(len(body)),
                                         "Cache-Control": "no-store"}), body)
@@ -850,6 +1050,15 @@ class Herdr:
         pane = message.get("pane")
         if not isinstance(pane, str) or not pane or len(pane) > 128:
             raise RuntimeError("Select a pane first")
+        if action == "read":
+            result = await self.request("pane.read", {"pane_id": pane, "source": "visible",
+                                                      "format": "ansi", "strip_ansi": False, "lines": 160})
+            output = result["read"]
+            text = output.get("text", "")
+            if not isinstance(text, str):
+                raise RuntimeError("Herdr returned invalid terminal output")
+            return {"pane": pane, "text": text[:120000],
+                    "truncated": bool(output.get("truncated")) or len(text) > 120000}
         if action == "focus":
             await self.request("pane.focus", {"pane_id": pane})
         elif action == "scroll":
@@ -1026,10 +1235,23 @@ async def main():
     if CERT and KEY:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(CERT, KEY)
-    async with serve(handler, BIND, PORT, ssl=ctx, process_request=process_request,
-                     max_size=None, ping_interval=20, ping_timeout=60):
-        print(f"listening on {BIND}:{PORT} ({'https' if ctx else 'http'}) "
-              f"sink={SINK} rate={RATE} latency={LATENCY}ms", flush=True)
+    async with AsyncExitStack() as stack:
+        await stack.enter_async_context(serve(handler, BIND, PORT, ssl=ctx,
+            process_request=process_request, max_size=None, ping_interval=20, ping_timeout=60))
+        if LOCAL_BIND:
+            if not TOKEN or not LOCAL_URL.startswith("https://"):
+                raise RuntimeError("Laptop listener requires HTTPS and an access token")
+            local_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            local_ctx.load_cert_chain(LOCAL_CERT, LOCAL_KEY)
+            try:
+                await stack.enter_async_context(serve(handler, LOCAL_BIND, LOCAL_PORT, ssl=local_ctx,
+                    process_request=process_request, max_size=None, ping_interval=20, ping_timeout=60))
+                print(f"LAN HTTPS listening on {LOCAL_BIND}:{LOCAL_PORT}", flush=True)
+            except OSError:
+                # Wi-Fi may be absent at boot. Keep the public endpoint running;
+                # the LAN sync timer retries once the interface has an address.
+                print("LAN listener unavailable; public endpoint remains active", flush=True)
+        print(f"listening on {BIND}:{PORT}", flush=True)
         await asyncio.get_running_loop().create_future()
 
 if __name__ == "__main__":

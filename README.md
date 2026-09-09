@@ -266,3 +266,19 @@ PhoneMic uses Herdr's private local socket at `~/.config/herdr/herdr.sock`.
 Set `PM_HERDR_SOCKET` in the receiver environment for another session socket.
 Terminal controls require a PhoneMic access token; its existing phone link grants
 access to these controls. No additional public endpoint or port is needed.
+
+## Live agent output
+
+The selected pane's terminal screen appears above the keys and refreshes once a
+second. Colors and spacing are preserved; swipe horizontally for wide lines.
+The expand icon opens a full-screen reader. Close it to return to the controls.
+
+**Follow** keeps the preview updated and scrolled to the bottom. Touching the
+output, scrolling upward, or selecting text pauses updates so the screen stays
+still while you read. Tap Follow to resume. The existing Herdr scroll buttons
+change the laptop's viewport and fetch the resulting screen, even when paused.
+
+Preview reads pause while the page is hidden or the microphone is capturing.
+The viewer shows Herdr's visible screen, not a permanent conversation archive.
+Terminal content is rendered as text with color spans; terminal HTML and links
+are never executed. Reads are limited to 160 lines and 120,000 characters.

@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+exec "$HOME/.local/share/phonemic/acme-venv/bin/certbot" renew \
+  --config-dir "$HOME/.config/phonemic/acme" \
+  --work-dir "$HOME/.local/share/phonemic/acme-work" \
+  --logs-dir "$HOME/.local/share/phonemic/acme-logs" \
+  --deploy-hook "systemctl --user restart phonemic-web" --quiet

@@ -28,3 +28,37 @@ sudo loginctl enable-linger "$USER"
   wrong after this is in the browser (usually a denied microphone permission).
 - nothing at all — the phone never reached the computer.
 - `rate -> 24000 Hz` — the phone selected a different quality.
+
+## Direct Wi-Fi HTTPS connection
+
+Settings offers `Use Wi-Fi connection`, which opens
+`https://lan.mic.example.com:8445` with the existing access token and audio
+preferences. This DNS-only hostname resolves to the laptop's private Wi-Fi
+address. Audio, keys and output connect directly over the LAN; neither
+Tailscale nor Cloudflare Tunnel carries that connection. Both devices must be
+on the same reachable local network. Android asks for microphone permission
+once on the new origin. Guest Wi-Fi isolation or DNS rebinding protection may
+prevent access; the public connection remains available.
+
+`PM_LOCAL_BIND`, `PM_LOCAL_PORT`, `PM_LOCAL_URL`, `PM_LOCAL_CERT`,
+`PM_LOCAL_KEY`, and `PM_PUBLIC_URL` are in `~/.config/phonemic/web.env`.
+The secondary listener binds only to the Wi-Fi address, requires the same
+access token, and uses a Let's Encrypt certificate. The loopback HTTP listener
+continues serving Cloudflare Tunnel. A missing Wi-Fi address at boot does not
+stop the public listener.
+
+`phonemic-lan-sync.timer` runs `scripts/lan-dns.py sync` every two minutes.
+It keeps the DNS-only A record and bind address aligned with DHCP on `wlo1`.
+`phonemic-cert-renew.timer` runs `scripts/renew-local-cert` daily. Certbot's
+DNS challenge hooks create and delete only the matching ACME TXT record,
+using existing credentials from `~/.cloudflared/cert.pem`. These credentials
+never enter the phone page. Renewals restart the receiver to load the new
+certificate; address changes also restart it, interrupting active connections.
+
+Installed scripts are in `~/.local/share/phonemic/`. Certbot is isolated in
+its `acme-venv` there; certificate configuration is in
+`~/.config/phonemic/acme`. The two timer/service pairs are in `systemd/`.
+They are specific to this laptop: adapt the hostname and interface before
+installing elsewhere. The standard installer does not install these optional
+LAN services. After script changes, copy the scripts to the installed path;
+after unit changes, copy the units and run `systemctl --user daemon-reload`.

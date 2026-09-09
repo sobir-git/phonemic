@@ -1,0 +1,5 @@
+[Unit]
+Description=Renew PhoneMic laptop HTTPS certificate
+[Service]
+Type=oneshot
+ExecStart=%h/.local/share/phonemic/renew-local-cert

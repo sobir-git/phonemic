@@ -153,3 +153,15 @@ class HerdrTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(RuntimeError):
                 await remote.control({'pane': 'w2:p3', **command})
         remote.request.assert_not_awaited()
+
+
+class OutputReadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_read_is_bounded_and_targets_requested_pane(self):
+        remote = webmic.Herdr()
+        remote.request = AsyncMock(return_value={'read': {'text': 'a'*120001, 'truncated': False}})
+        result = await remote.control({'action': 'read', 'pane': 'w4:p2', 'lines': 999999})
+        remote.request.assert_awaited_once_with('pane.read', {
+            'pane_id': 'w4:p2', 'source': 'visible', 'format': 'ansi', 'strip_ansi': False, 'lines': 160})
+        self.assertEqual(result['pane'], 'w4:p2')
+        self.assertEqual(len(result['text']), 120000)
+        self.assertTrue(result['truncated'])

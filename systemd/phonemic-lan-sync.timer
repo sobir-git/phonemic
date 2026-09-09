@@ -1,0 +1,7 @@
+[Unit]
+Description=Keep PhoneMic Wi-Fi DNS in sync with DHCP
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=2min
+[Install]
+WantedBy=timers.target

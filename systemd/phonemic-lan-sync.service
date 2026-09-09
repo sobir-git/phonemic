@@ -1,0 +1,5 @@
+[Unit]
+Description=Update PhoneMic direct Wi-Fi address
+[Service]
+Type=oneshot
+ExecStart=%h/.local/share/phonemic/lan-dns.py sync
