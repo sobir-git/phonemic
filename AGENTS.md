@@ -1,7 +1,9 @@
 # PhoneMic agent instructions
 
 Read `README.md`, `docs/systemd.md`, and `install.sh` for project operations.
-Use the existing local installation when the user says "deploy".
+Deploy requested changes to the existing local installation by default, unless
+the user explicitly says not to deploy. Implementation requests authorize the
+necessary file copies and receiver restart; do not wait for a separate "deploy".
 PhoneMic runs on this Linux computer as a systemd user service. Cloudflare
 Tunnel forwards traffic to it; the app is not hosted on Railway or Workers.
 Do not create a cloud deployment or change hosting providers unless requested.
@@ -37,8 +39,9 @@ If the installed path differs, use the path confirmed by the service. For a
 full CLI, receiver, and assets update, use `./install.sh`, then restart the
 receiver. The installer alone does not restart the running service.
 
-An explicit deployment request authorizes copying the changed files and
-restarting the receiver. Complete it without asking for repeated confirmation.
+Requested changes and explicit deployment requests authorize copying the changed
+files and restarting the receiver. Complete deployment without asking for
+repeated confirmation, unless the user has asked not to deploy.
 The restart interrupts active microphone connections. Routine UI deployments
 do not require restarting or reconfiguring the tunnel, rerunning setup, or
 reinstalling service units.

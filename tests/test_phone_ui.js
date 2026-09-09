@@ -3,25 +3,25 @@ const assert = require('node:assert/strict');
 const {execFileSync} = require('node:child_process');
 const vm = require('node:vm');
 const source = execFileSync('python3', ['-c', "import ast,pathlib; tree=ast.parse(pathlib.Path('lib/webmic.py').read_text()); print(next(ast.literal_eval(n.value) for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='PAGE' for t in n.targets)))"], {encoding:'utf8'}).split('<script>')[1].split('</script>')[0].replace("remoteAction({action:'list'});\n\n", '');
-function browser() {
+function browser(store = {}) {
   const elements = new Map();
   const context = vm.createContext({
     document: {
       getElementById(id) {
         if (!elements.has(id)) elements.set(id, {
-          textContent: id === "connection-config" ? '{"local":""}' : "", setAttribute(k,v){this[k]=v;}, value: id === 'q' ? '24000:1' : '', checked: false, style: {},
+          children:[], replaceChildren(){this.children=[];}, append(child){this.children.push(child);}, showModal(){this.open=true;}, close(){this.open=false;}, focus(){}, textContent: id === "connection-config" ? '{"local":""}' : "", setAttribute(k,v){this[k]=v;}, value: id === 'q' ? '24000:1' : '', checked: false, style: {},
           classList: {add(){}, remove(){}, toggle(){}},
           handlers:{}, addEventListener(type,fn){this.handlers[type]=fn;}, getContext(){return {};},
         });
         return elements.get(id);
       },
-      addEventListener(){}, querySelectorAll(){return [
+      addEventListener(){}, createElement(){return {dataset:{},handlers:{},addEventListener(k,f){this.handlers[k]=f;},setAttribute(){}};}, querySelectorAll(selector){if(selector==='#command-buttons button')return elements.get('command-buttons')?.children||[];if(selector==='[data-command]'||selector==='[data-pane-action]')return [];return [
         {addEventListener(){},dataset:{mod:'ctrl'},setAttribute(k,v){this[k]=v}},
         {addEventListener(){},dataset:{mod:'alt'},setAttribute(k,v){this[k]=v}},
         {addEventListener(){},dataset:{key:'enter'},setAttribute(){}},
       ];},
     },
-    navigator: {}, localStorage: {getItem(){return null;}},
+    navigator: {}, localStorage: {getItem(k){return k in store ? store[k] : null;},setItem(k,v){store[k]=String(v);}}, confirm(){return true;},
     requestAnimationFrame(){}, setTimeout, clearTimeout, setInterval(){},
     performance, console,
   });
@@ -32,6 +32,33 @@ function browser() {
   return run;
 }
 (async () => {
+  {
+    const run = browser();
+    await run(`trackpadPanel.hidden=true; $('open-trackpad').onclick()`);
+    assert.equal(run('trackpadPanel.hidden'), false);
+    assert.equal(run("$('open-trackpad')['aria-expanded']"), 'true');
+    await run("$('open-trackpad').onclick()");
+    assert.equal(run('trackpadPanel.hidden'), true);
+    run(`trackpadPanel.hidden=false;trackpadPad.setPointerCapture=()=>{};
+      var mouseCommands=[];mouseCommand=async c=>mouseCommands.push(c);
+      trackpadPad.handlers.pointerdown({preventDefault(){},isPrimary:true,pointerId:1,clientX:20,clientY:20});
+      trackpadPad.handlers.pointerup({pointerId:1});`);
+    await new Promise(setImmediate);
+    assert.equal(run('JSON.stringify(mouseCommands)'), '[{"action":"click","button":"left"}]');
+    run(`mouseCommands=[];
+      trackpadPad.handlers.pointerdown({preventDefault(){},isPrimary:true,pointerId:2,clientX:20,clientY:20});
+      trackpadPad.handlers.pointermove({pointerId:2,clientX:40,clientY:10});
+      trackpadPad.handlers.pointerup({pointerId:2});`);
+    await new Promise(setImmediate);
+    assert.equal(run('JSON.stringify(mouseCommands)'), '[{"action":"move","dx":30,"dy":-15}]');
+    run(`mouseCommands=[];
+      trackpadPad.handlers.pointerdown({preventDefault(){},isPrimary:true,pointerId:3,clientX:20,clientY:20});
+      trackpadPad.handlers.pointercancel();trackpadPad.handlers.pointerup({pointerId:3});`);
+    assert.equal(run('mouseCommands.length'), 0);
+    run("$('trackpad-right').onclick()");
+    await new Promise(setImmediate);
+    assert.equal(run('mouseCommands[0].button'), 'right');
+  }
   {
     const run = browser();
     run('dictation.checked=true');
@@ -111,7 +138,8 @@ function browser() {
     run('sockets[1].onclose()');
     assert.equal(run('ready'), false);
     assert.equal(run('ws'), null);
-    assert.match(run('st.innerHTML'), /press to reconnect/);
+    assert.match(run('st.innerHTML'), /reconnecting/);
+    run('dis.onclick()');
   }
   {
     const run = browser();
@@ -209,5 +237,98 @@ function browser() {
     await run('refreshOutput()');
     assert.equal(run('outputText'),null);
   }
-  console.log('16 phone interaction checks passed');
+  {
+    const run=browser();
+    run("$('output-home').hidden=true;outputPane='w1:p1';var reads=0;herdrCommand=async()=>{reads++;return {pane:'w1:p1',text:''}};renderTerminal=()=>{}");
+    await run('refreshOutput(true)');assert.equal(run('reads'),0);
+    run("$('toggle-output').onclick()");await new Promise(setImmediate);
+    assert.equal(run('reads'),1);assert.equal(run("$('toggle-output')['aria-expanded']"),'true');
+    run("$('toggle-output').onclick()");await run('refreshOutput()');assert.equal(run('reads'),1);
+  }
+  {
+    const run=browser();
+    run("paneSelect.value='w1:p1';paintRemote();var commandSent=[];remoteAction=c=>commandSent.push(c)");
+    assert.equal(run("$('command-buttons').children.length"),4);
+    run("$('command-buttons').children[0].onclick()");
+    assert.equal(run('JSON.stringify(commandSent)'), '[{"action":"command","pane":"w1:p1","text":"/clear"}]');
+    run("$('add-command').onclick();$('custom-command').value='my-command';$('save-command').onsubmit({preventDefault(){}})");
+    assert.equal(run("$('command-dialog').open"),false);
+    assert.equal(run("$('command-buttons').children[4].textContent"),'my-command');
+    run("var heldButton=$('command-buttons').children[4];heldButton.handlers.pointerdown({button:0,clientX:0,clientY:0})");
+    await new Promise(r=>setTimeout(r,650));
+    run('heldButton.handlers.pointerup();heldButton.onclick()');
+    assert.equal(run('commandSent.length'),1);
+    assert.equal(run('savedCommands.includes("my-command")'),false);
+    run("confirm=()=>false;var kept=$('command-buttons').children[0];kept.handlers.contextmenu({preventDefault(){}});kept.onclick()");
+    assert.equal(run('savedCommands.includes("/clear")'),true);
+    assert.equal(run('commandSent.length'),1);
+    run("var moved=$('command-buttons').children[1];moved.handlers.pointerdown({button:0,clientX:0,clientY:0});moved.handlers.pointermove({clientX:20,clientY:0});moved.handlers.pointerup();moved.onclick()");
+    assert.equal(run('commandSent.length'),1);
+  }
+  {
+    const run=browser();
+    run("outputText='Hello world'+String.fromCharCode(10)+'other line';$('search-output').value='WORLD';$('search-output').oninput()");
+    assert.equal(run("$('search-results').textContent"),'1: Hello world');
+    assert.equal(run('outputFollow'),false);
+    run("paneSelect.value='w2:p3';var inserted;remoteAction=c=>inserted=c;$('composer').value='draft';$('insert-text').onclick()");
+    assert.equal(run('JSON.stringify(inserted)'),'{"action":"text","pane":"w2:p3","text":"draft"}');
+    assert.equal(run("$('composer').value"),'draft');
+    run("completionAlerts=true;inventory=[{id:'p1',state:'working'}];notifyCompletions([{id:'p1',workspace:'Project',agent:'codex',state:'done'}])");
+    assert.equal(run("$('notification-status').textContent"),'Project · codex finished');
+    run("$('notification-status').textContent='';inventory=[{id:'p1',state:'done'}];notifyCompletions([{id:'p1',state:'done'}])");
+    assert.equal(run("$('notification-status').textContent"),'');
+    run('var buzz; navigator.vibrate=value=>buzz=value;haptic()');assert.equal(run('buzz'),10);
+    run('navigator.vibrate=()=>{throw Error("unsupported")};haptic()');
+  }
+  {
+    const run=browser();
+    run("$('command-panel').hidden=$('composer-panel').hidden=true;$('commands-tab').onclick()");
+    assert.equal(run("$('command-panel').hidden"),false);
+    run("$('composer-tab').onclick()");
+    assert.equal(run("$('command-panel').hidden"),true);
+    assert.equal(run("$('composer-panel').hidden"),false);
+    run("$('composer-tab').onclick()");
+    assert.equal(run("$('composer-panel').hidden"),true);
+  }
+  {
+    const run=browser();
+    run(`var retryCallback,retryWait;setTimeout=(fn,delay)=>{retryCallback=fn;retryWait=delay;return 42};clearTimeout=()=>{};
+      ready=false;scheduleReconnect();`);
+    assert.equal(run('retryWait'),1000);
+    run('document.hidden=true;retryCallback()');assert.equal(run('reconnectTimer'),null);
+    run('document.hidden=false;resumeConnection()');assert.equal(run('retryWait'),0);
+    run('manualDisconnect=true;reconnectTimer=null;resumeConnection()');assert.equal(run('reconnectTimer'),null);
+    run('manualDisconnect=false;ready=true;lastMessageAt=Date.now()-20000;resumeConnection()');
+    assert.equal(run('ready'),false);assert.equal(run('capturing'),false);assert.equal(run('retryWait'),0);
+  }
+  {
+    // settings that should survive a reload
+    const run=browser({'pm.output':'1','pm.alerts':'1','pm.draft':'hello draft'});
+    assert.equal(run("$('output-home').hidden"),false);
+    assert.equal(run("$('toggle-output').textContent"),'Hide output');
+    assert.equal(run("$('toggle-output')['aria-expanded']"),'true');
+    assert.equal(run('completionAlerts'),true);
+    assert.equal(run("$('notifications').textContent"),'Completion alerts: on');
+    assert.equal(run("$('notifications')['aria-pressed']"),'true');
+    assert.equal(run("$('composer').value"),'hello draft');
+  }
+  {
+    // nothing stored: the restores stay out of the way
+    const run=browser();
+    assert.equal(run("$('toggle-output').textContent"),'');
+    assert.equal(run('completionAlerts'),false);
+    assert.equal(run("$('composer').value"),'');
+  }
+  {
+    // toggling writes the choice back
+    const run=browser();
+    run("$('composer').value='typed';$('composer').handlers.input();");
+    run("$('output-home').hidden=true;$('toggle-output').onclick()");
+    assert.equal(run("$('output-home').hidden"),false);
+    await run("$('notifications').onclick()");
+    assert.equal(run('completionAlerts'),true);
+    run("$('clear-draft').onclick()");
+    assert.equal(run("$('composer').value"),'');
+  }
+  console.log('Phone interaction checks passed');
 })().catch(error => {console.error(error); process.exitCode=1;});

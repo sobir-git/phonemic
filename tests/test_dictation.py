@@ -109,6 +109,69 @@ class BufferedAudioTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HerdrTests(unittest.IsolatedAsyncioTestCase):
+    async def test_claude_scroll_sends_mouse_wheel_to_selected_pane(self):
+        for direction, button in [('up', 64), ('down', 65)]:
+            remote = webmic.Herdr()
+            remote.request = AsyncMock(side_effect=[
+                {'pane': {'agent': 'claude', 'scroll': {'max_offset_from_bottom': 0}}},
+                {'layout': {'panes': [{'pane_id': 'w1:p1', 'rect': {'width': 110, 'height': 34}}]}}, {}])
+            await remote.control({'action': 'scroll', 'pane': 'w1:p1', 'direction': direction})
+            self.assertEqual(remote.request.await_args.args, ('pane.send_text',
+                {'pane_id': 'w1:p1', 'text': f'\x1b[<{button};55;17M'*3}))
+
+    async def test_claude_latest_wheels_until_screen_stops_changing(self):
+        remote = webmic.Herdr()
+        remote.request = AsyncMock(side_effect=[
+            {'pane': {'agent': 'claude', 'scroll': {'max_offset_from_bottom': 0}}},
+            {'layout': {'panes': [{'pane_id': 'w1:p1', 'rect': {'width': 110, 'height': 34}}]}},
+            {'read': {'text': 'older'}}, {}, {'read': {'text': 'latest'}}, {}, {'read': {'text': 'latest'}}])
+        await remote.control({'action': 'scroll', 'pane': 'w1:p1', 'direction': 'bottom'})
+        wheels = [c.args for c in remote.request.await_args_list if c.args[0] == 'pane.send_text']
+        self.assertEqual(wheels, [('pane.send_text', {'pane_id': 'w1:p1', 'text': '\x1b[<65;55;17M'*40})]*2)
+
+    async def test_commands_and_clear_input(self):
+        remote = webmic.Herdr()
+        remote.request = AsyncMock(return_value={})
+        await remote.control({'action': 'command', 'pane': 'w1:p1', 'text': 'cc-yolo'})
+        self.assertEqual([c.args for c in remote.request.await_args_list], [
+            ('pane.send_text', {'pane_id': 'w1:p1', 'text': 'cc-yolo'})])
+        remote.request.reset_mock()
+        for text in ['', 'a\nb', '\x1b', 'a'*2001]:
+            with self.assertRaises(RuntimeError):
+                await remote.control({'action': 'command', 'pane': 'w1:p1', 'text': text})
+        remote.request.assert_not_awaited()
+        await remote.control({'action': 'key', 'pane': 'w1:p1', 'key': 'u', 'modifiers': ['ctrl']})
+        remote.request.assert_awaited_once_with('pane.send_keys', {'pane_id': 'w1:p1', 'keys': ['ctrl+u']})
+
+    async def test_composer_inserts_multiline_text_without_keys(self):
+        remote = webmic.Herdr()
+        remote.request = AsyncMock(return_value={})
+        await remote.control({'action': 'text', 'pane': 'w1:p1', 'text': 'hello\nworld'})
+        remote.request.assert_awaited_once_with('pane.send_text', {'pane_id': 'w1:p1', 'text': 'hello\nworld'})
+        remote.request.reset_mock()
+        for text in ['\x1b[31m', 'a'*20001]:
+            with self.assertRaises(RuntimeError):
+                await remote.control({'action': 'text', 'pane': 'w1:p1', 'text': text})
+        remote.request.assert_not_awaited()
+
+    async def test_create_workspace_uses_selected_directory(self):
+        remote = webmic.Herdr()
+        remote.request = AsyncMock(side_effect=[{'pane': {'cwd': '/tmp/project'}}, {'root_pane': {'pane_id': 'w2:p1'}}])
+        result = await remote.control({'action': 'workspace', 'pane': 'w1:p1', 'label': 'New project'})
+        self.assertEqual(result, {'pane': 'w2:p1'})
+        self.assertEqual(remote.request.await_args.args, ('workspace.create', {'label': 'New project', 'cwd': '/tmp/project', 'focus': True}))
+        remote.request.reset_mock()
+        with self.assertRaises(RuntimeError):
+            await remote.control({'action': 'workspace', 'label': 'New', 'cwd': 'relative/path'})
+        remote.request.assert_not_awaited()
+
+    async def test_split_preserves_space_and_directory(self):
+        remote = webmic.Herdr()
+        remote.request = AsyncMock(side_effect=[{'pane': {'workspace_id': 'w1', 'cwd': '/tmp/project'}}, {'pane': {'pane_id': 'w1:p2'}}])
+        self.assertEqual(await remote.control({'action': 'split', 'pane': 'w1:p1'}), {'pane': 'w1:p2'})
+        self.assertEqual(remote.request.await_args.args, ('pane.split', {
+            'target_pane_id': 'w1:p1', 'workspace_id': 'w1', 'direction': 'down', 'cwd': '/tmp/project', 'focus': True}))
+
     async def test_inventory_exposes_only_picker_metadata(self):
         remote = webmic.Herdr()
         remote.request = AsyncMock(side_effect=[

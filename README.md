@@ -269,8 +269,9 @@ access to these controls. No additional public endpoint or port is needed.
 
 ## Live agent output
 
-The selected pane's terminal screen appears above the keys and refreshes once a
-second. Colors and spacing are preserved; swipe horizontally for wide lines.
+Live output is hidden by default. Tap **Show output**, before Refresh, to open
+the selected pane's terminal screen above the keys. It refreshes once a second
+while open. Colors and spacing are preserved; swipe horizontally for wide lines.
 The expand icon opens a full-screen reader. Close it to return to the controls.
 
 **Follow** keeps the preview updated and scrolled to the bottom. Touching the
@@ -286,3 +287,71 @@ are never executed. Reads are limited to 160 lines and 120,000 characters.
 Herdr inventory changes are watched by the receiver and pushed over the phone
 WebSocket when the snapshot changes. This keeps pane status, focus, labels and
 the selected preview current without relying only on the browser's timer.
+
+## Occasional trackpad
+
+Tap **Trackpad** in the keyboard row to expand the pad below the keys.
+Slide one finger to move the laptop pointer,
+tap for a left click, or use the Left click and Right click buttons. Tap
+**Trackpad** again to collapse it. Only the button takes space when closed,
+and opening it does not start the microphone.
+The pointer controls the whole desktop, independently of the selected Herdr pane.
+
+Requires an X11 desktop and `xdotool` on the receiver computer. The user service
+must inherit `DISPLAY` and `XAUTHORITY` from that desktop session. Wayland is not
+supported. The existing access token also grants mouse control; no additional
+port or service is used. This basic pad supports movement and clicks, not dragging
+or scrolling.
+
+## Mobile commands and panes
+
+Open **Commands & panes** for `/clear`, `/model`, `cx`, and `cc-yolo`.
+Tap a command to type its text into the selected pane. It does not clear input
+or press Enter.
+Ctrl+U also has its own button for deleting input before the cursor.
+Tap **+** to open the add-command dialog. Saved commands appear alongside the
+default commands. Hold any command to open a delete confirmation.
+Commands are saved in this browser, separately for each connection hostname.
+
+**New pane** splits below the selected pane in the same space and directory,
+then focuses the new shell. **Close pane** asks for confirmation before ending
+that terminal session. Controls are disabled during microphone capture.
+
+For Claude panes without host scrollback, Scroll up/down sends terminal mouse-wheel
+events directly to the selected pane. Latest scrolls down in bounded batches until
+the screen stops changing; very long histories may require another tap.
+Other panes continue using Herdr's terminal history.
+
+## Mobile control center
+
+**Type a message** opens a text composer. **Type into pane** inserts the draft
+without pressing Enter; the draft remains until you clear it. Multiline paste
+uses Herdr's terminal input handling. In a plain shell without bracketed paste,
+newlines can execute shell commands, so use single-line text there.
+
+**New space** creates and focuses a workspace. Supply an absolute directory or
+leave it blank to inherit the selected pane's directory.
+
+**Completion alerts** watches for agents changing from working to done, idle,
+or needing input. It shows a message and vibrates, and requests permission for
+browser notifications where supported. Alerts require the page to stay connected;
+there is no background push service. The on/off choice is remembered in this
+browser and restored on reload while the notification permission still stands.
+
+Quality, hands-free, dictation, saved commands, the completion-alert switch,
+whether Live output is open, and the message draft all persist in this browser.
+The selected pane is not stored; it follows the focused pane reported by Herdr.
+
+Search in Live output filters matching lines from the current screen snapshot
+and pauses Follow while you read. It does not search a full conversation archive.
+Buttons give a short vibration on supported phones; holding a command gives a
+slightly longer vibration before its delete confirmation.
+
+Commands & panes and Type a message share one row of collapsible controls.
+Opening either closes the other; tapping the open control collapses both.
+
+The phone reconnects automatically after a dropped connection or when returning
+to the page. Retries back off to every 15 seconds while the page is visible and
+online. A stale connection is replaced if the receiver has been silent for 15
+seconds. Reconnection restores controls without restarting microphone capture.
+Disconnect explicitly pauses retries until you use a control to connect again.

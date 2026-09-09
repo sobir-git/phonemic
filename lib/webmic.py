@@ -113,18 +113,24 @@ PAGE = """<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>PhoneMic</title>
 <link rel=manifest href="/manifest.webmanifest__Q__">
-<meta name=theme-color content="#111316">
+<meta name=theme-color content="#101728">
 <meta name=mobile-web-app-capable content=yes>
 <meta name=apple-mobile-web-app-capable content=yes>
 <meta name=apple-mobile-web-app-status-bar-style content=black>
 <link rel=apple-touch-icon href="/apple-touch-icon.png">
 <style>
-:root{color-scheme:dark;--bg:#07090c;--fg:#f6f8fc;--dim:#b3bbc9;--line:#303a49;
---panel:#10141b;--green:#26d991;--amber:#ffcc4d;--grey:#3a4048}
+:root{color-scheme:dark;
+--bg:#101728;--well:#0B111F;--surface:#1A2440;--raise:#243156;--key:#2A3860;
+--line:#37477A;--edge:#4A5C93;
+--fg:#EEF3FF;--dim:#9FB0D2;--mute:#6E7EA6;
+--voice:#14E39C;--voice-ink:#04231A;
+--agent:#5B9CFF;--term:#45DCDC;--pad:#A98BFF;
+--warn:#FFC24D;--alert:#FF7A6E;
+--r:14px}
 *{box-sizing:border-box}
 .icon{width:20px;height:20px;flex-shrink:0;display:inline-block;vertical-align:middle;
-fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-#remote .direction-pad .icon{width:23px;height:23px;stroke-width:2}
+fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+#remote .direction-pad .icon{width:24px;height:24px;stroke-width:2.2}
 #remote .remote-scroll button,.remote-edit button,#gear,#picker-close{display:flex;align-items:center;justify-content:center;gap:.35rem}
 .remote-scroll .icon{width:16px;height:16px}
 .context-mark .icon{width:16px;height:16px}
@@ -135,158 +141,219 @@ font:16px/1.5 system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:tra
 -webkit-user-select:none;user-select:none;overscroll-behavior:none;
 padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 
-/* top bar + settings */
-header{display:flex;align-items:center;justify-content:space-between;
-padding:.85rem 1.1rem;border-bottom:1px solid var(--line)}
-header h1{margin:0;font-size:.95rem;font-weight:600;letter-spacing:.03em}
-#gear{background:none;border:0;color:var(--dim);font-size:1.15rem;padding:.3rem .4rem;line-height:1}
-#gear.open{color:var(--fg)}
+/* floating settings key — the top bar is gone, the page starts at the content */
+#gear{position:fixed;top:calc(env(safe-area-inset-top) + .45rem);right:calc(env(safe-area-inset-right) + .55rem);
+z-index:6;width:40px;height:40px;padding:0;border-radius:12px;line-height:1;
+background:var(--raise);border:1px solid var(--line);color:var(--dim);
+box-shadow:0 2px 0 #0A1020,0 6px 18px #05070f66}
+#gear.open{background:var(--agent);border-color:var(--agent);color:#06122B;box-shadow:0 2px 0 #0A1020}
+#gear:active{transform:translateY(2px);box-shadow:none}
+
 #panel[hidden]{display:none}
-#panel{border-bottom:1px solid var(--line);background:var(--panel);
-padding:.9rem 1.1rem;display:flex;flex-direction:column;gap:.85rem;font-size:.85rem}
-#connection-card{border:1px solid #435166;border-radius:12px;padding:1rem;background:#151e29}
+#panel{margin:.5rem .55rem 0;border:1px solid var(--line);border-radius:var(--r);
+background:var(--surface);border-left:3px solid var(--agent);
+padding:2.9rem .9rem .8rem;display:flex;flex-direction:column;gap:.7rem;font-size:.85rem}
+#connection-card{border:1px solid var(--edge);border-left:3px solid var(--voice);
+border-radius:12px;padding:.85rem;background:var(--raise)}
 #connection-card[hidden]{display:none}
-#connection-card p{color:var(--dim);line-height:1.5;margin:.5rem 0 .8rem}
-#connection-card button{background:#26d991;color:#06120c;border:0;border-radius:8px;padding:.7rem 1rem;font:inherit;font-weight:650;width:100%}
-#connection-address{display:block;color:var(--dim);overflow-wrap:anywhere;margin-top:.6rem}
+#connection-card strong{font-size:.92rem;letter-spacing:.01em}
+#connection-card p{color:var(--dim);line-height:1.5;margin:.4rem 0 .7rem}
+#connection-card button{background:var(--voice);color:var(--voice-ink);border:0;border-radius:10px;
+padding:.72rem 1rem;font:inherit;font-weight:700;width:100%;box-shadow:0 2px 0 #0A7A54}
+#connection-card button:active{transform:translateY(2px);box-shadow:none}
+#connection-address{display:block;color:var(--dim);overflow-wrap:anywhere;margin-top:.55rem;
+font:.75rem/1.4 ui-monospace,SFMono-Regular,monospace}
 .row{display:flex;align-items:center;justify-content:space-between;gap:1rem}
 .row label{color:var(--dim)}
-select{background:#20242a;color:var(--fg);border:1px solid #2b3037;border-radius:8px;
-padding:.4rem .55rem;font:inherit;font-size:.85rem}
-input[type=checkbox]{width:1.15rem;height:1.15rem;accent-color:var(--green)}
+select{background:var(--key);color:var(--fg);border:1px solid var(--edge);border-radius:9px;
+padding:.45rem .6rem;font:inherit;font-size:.85rem}
+input[type=checkbox]{width:1.3rem;height:1.3rem;accent-color:var(--voice)}
 .key{display:flex;gap:.9rem;flex-wrap:wrap;color:var(--dim);font-size:.72rem}
-.key span{display:flex;align-items:center;gap:.3rem}
-.key i{width:.6rem;height:.6rem;border-radius:2px}
-#dis{background:none;border:1px solid #2b3037;color:var(--dim);border-radius:8px;
-padding:.45rem;font:inherit;font-size:.8rem}
+.key span{display:flex;align-items:center;gap:.35rem}
+.key i{width:.65rem;height:.65rem;border-radius:3px}
+#dis{background:transparent;border:1px solid var(--alert);color:var(--alert);border-radius:10px;
+padding:.55rem;font:600 .8rem system-ui}
+#dis:active{background:#3A1A20}
 
 /* middle: waveform + one line of status */
-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-gap:.6rem;padding:1rem;min-height:auto}
-#vis{width:100%;max-width:420px;height:40px;background:var(--panel);border-radius:12px}
-#st{font-size:.85rem;color:var(--dim);text-align:center;min-height:1.3em}
-#lap{font-size:.75rem;color:#6b7079;text-align:center;min-height:1.1em;max-width:24rem}
-.dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;
-background:#555;margin-right:.4rem;vertical-align:middle}
-.dot.live{background:var(--green)}.dot.warn{background:var(--amber)}
+main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+gap:.5rem;padding:.55rem;min-height:auto}
+#vis{width:100%;max-width:480px;height:44px;background:var(--well);border-radius:12px;
+border:1px solid var(--line)}
+#st{font-size:.85rem;color:var(--fg);text-align:center;min-height:1.3em;font-weight:550}
+#lap{font-size:.75rem;color:var(--mute);text-align:center;min-height:1.1em;max-width:24rem}
+.dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;
+background:var(--mute);margin-right:.45rem;vertical-align:middle}
+.dot.live{background:var(--voice);box-shadow:0 0 0 4px #14E39C33}
+.dot.warn{background:var(--warn);box-shadow:0 0 0 4px #FFC24D33}
 
-#remote{width:100%;max-width:420px;border:1px solid var(--line);border-radius:12px;
-background:var(--panel);padding:.8rem;margin-bottom:.5rem}
-.remote-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem}
-.remote-head label{font-size:.8rem;color:var(--dim)}
-#remote #panes{width:100%;min-height:62px;display:flex;align-items:center;gap:.8rem;
-  padding:.7rem .8rem;text-align:left;background:#192841;border-color:#658bd0;border-radius:10px}
+/* the agent remote — azure is its hue throughout */
+#remote{width:100%;max-width:480px;border:1px solid var(--line);border-radius:var(--r);
+background:var(--surface);border-top:3px solid var(--agent);padding:.7rem;margin-bottom:.4rem}
+.remote-head{display:flex;align-items:center;justify-content:space-between;
+  gap:.5rem;padding-right:44px;margin-bottom:.5rem}
+.remote-head label{font-size:.8rem;color:var(--fg);font-weight:650;letter-spacing:.02em}
+#remote #panes{width:100%;min-height:64px;display:flex;align-items:center;gap:.8rem;
+  padding:.7rem .8rem;text-align:left;background:#1B2C55;border:1px solid var(--agent);border-radius:12px}
 .context-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:.2rem}
-.context-name{font-size:.9rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.context-detail{font: .72rem/1.4 ui-monospace,SFMono-Regular,monospace;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.context-chevron{font-size:1.1rem;color:#c5d8f8}
-.agent-dot{width:9px;height:9px;border-radius:50%;flex:0 0 9px;border:1.5px solid #a1abba;background:transparent}
-.agent-dot.idle{border-color:#43e69b}
-.agent-dot.working{border-color:#ffcc4d;background:#ffcc4d}
-.agent-dot.done{border-color:#57e3da;background:#57e3da}
-.agent-dot.blocked{border-color:#ff827a;background:#ff827a}
-#pane-picker{position:fixed;inset:auto 0 0;margin:0 auto;width:min(100%,460px);max-width:100%;
-  height:min(76dvh,650px);max-height:90dvh;padding:0;border:1px solid #363842;border-bottom:0;
-  border-radius:22px 22px 0 0;background:#090e15;color:var(--fg);box-shadow:0 -16px 80px #0008}
+.context-name{font-size:.92rem;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.context-detail{font:.72rem/1.4 ui-monospace,SFMono-Regular,monospace;color:#B9CBF0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.context-chevron{font-size:1.1rem;color:var(--agent)}
+.agent-dot{width:10px;height:10px;border-radius:50%;flex:0 0 10px;border:2px solid var(--mute);background:transparent}
+.agent-dot.idle{border-color:var(--voice)}
+.agent-dot.working{border-color:var(--warn);background:var(--warn);box-shadow:0 0 0 3px #FFC24D2E}
+.agent-dot.done{border-color:var(--term);background:var(--term);box-shadow:0 0 0 3px #45DCDC2E}
+.agent-dot.blocked{border-color:var(--alert);background:var(--alert);box-shadow:0 0 0 3px #FF7A6E2E}
+
+#pane-picker{position:fixed;inset:auto 0 0;margin:0 auto;width:min(100%,480px);max-width:100%;
+  height:min(78dvh,660px);max-height:92dvh;padding:0;border:1px solid var(--line);border-bottom:0;
+  border-top:3px solid var(--agent);
+  border-radius:20px 20px 0 0;background:var(--bg);color:var(--fg);box-shadow:0 -16px 80px #04060cCC}
 #pane-picker[open]{display:flex;flex-direction:column}
-#pane-picker::backdrop{background:#05070bb8;backdrop-filter:blur(5px)}
-.picker-handle{width:32px;height:4px;background:#434650;border-radius:4px;flex-shrink:0;margin:10px auto 0}
-.picker-heading{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.1rem .8rem}
-.picker-heading h2{font-size:1.05rem;margin:0;font-weight:600}
+#pane-picker::backdrop{background:#070B14C7;backdrop-filter:blur(6px)}
+.picker-handle{width:36px;height:4px;background:var(--edge);border-radius:4px;flex-shrink:0;margin:10px auto 0}
+.picker-heading{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem .7rem}
+.picker-heading h2{font-size:1.05rem;margin:0;font-weight:700}
 .picker-heading p{font-size:.75rem;color:var(--dim);margin:.3rem 0 0}
-#picker-close{width:40px;height:40px;border:0;border-radius:50%;background:#1c2532;color:#edf3ff;font-size:1.3rem}
-.picker-tabs{display:flex;margin:0 1.1rem .6rem;border-bottom:1px solid #2d3039;gap:1.3rem}
-.picker-tabs button{background:none;border:0;border-bottom:2px solid transparent;color:#b3bbc9;
-  padding:.7rem 0;font:600 .8rem system-ui;min-height:44px}
-.picker-tabs button[aria-selected=true]{border-bottom-color:#8eb9ff;color:#ffffff}
-#picker-list{overflow-y:auto;overscroll-behavior:contain;flex:1;padding:.2rem .6rem 1rem}
-.context-row{width:100%;display:flex;align-items:center;gap:.85rem;padding:.85rem .7rem;
-  min-height:66px;text-align:left;border:1px solid transparent;border-radius:9px;background:none;color:var(--fg)}
-.context-row+.context-row{margin-top:2px}
-.context-row[aria-current=true]{background:#162a47;border-color:#6799ed}
-.context-row:active{background:#303140}
-.context-row .context-name{font-size:.85rem;font-weight:500;font-family:ui-monospace,SFMono-Regular,monospace}
-.context-row[aria-current=true] .context-name{font-weight:650;color:#ffffff}
-.context-mark{color:#a8ccff;font-size:.9rem;width:16px;text-align:center}
-#remote button{min-height:40px;background:#1c2532;border:1px solid #435166;
-color:var(--fg);border-radius:7px;font:500 .8rem system-ui;touch-action:manipulation}
-#remote button:active{background:#39424a}
-#remote button:disabled{opacity:.4}
-#remote button[aria-pressed=true]{background:var(--green);color:#04210f}
-#refresh-panes{padding:0 .65rem;min-height:30px!important}
-.remote-tools,.remote-edit{display:flex;gap:.4rem;margin-top:.7rem}
+#picker-close{width:40px;height:40px;border:1px solid var(--line);border-radius:12px;background:var(--raise);color:var(--fg);font-size:1.3rem}
+.picker-tabs{display:flex;margin:0 1rem .6rem;border-bottom:1px solid var(--line);gap:1.3rem}
+.picker-tabs button{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);
+  padding:.7rem 0;font:650 .82rem system-ui;min-height:44px}
+.picker-tabs button[aria-selected=true]{border-bottom-color:var(--agent);color:var(--fg)}
+#picker-list{overflow-y:auto;overscroll-behavior:contain;flex:1;padding:.2rem .55rem 1rem}
+.context-row{width:100%;display:flex;align-items:center;gap:.85rem;padding:.8rem .7rem;
+  min-height:64px;text-align:left;border:1px solid transparent;border-left:3px solid transparent;
+  border-radius:10px;background:none;color:var(--fg)}
+.context-row+.context-row{margin-top:3px}
+.context-row[aria-current=true]{background:#1B2C55;border-color:var(--agent);border-left-color:var(--agent)}
+.context-row:active{background:var(--raise)}
+.context-row .context-name{font-size:.86rem;font-weight:500;font-family:ui-monospace,SFMono-Regular,monospace}
+.context-row[aria-current=true] .context-name{font-weight:700;color:#fff}
+.context-mark{color:var(--agent);font-size:.9rem;width:16px;text-align:center}
+
+/* keycaps: raised, with a real press */
+#remote button{min-height:44px;background:var(--key);border:1px solid var(--edge);
+color:var(--fg);border-radius:10px;font:600 .82rem system-ui;touch-action:manipulation;
+box-shadow:0 2px 0 #0C142A}
+#remote button:active{background:var(--raise)}
+#remote button:disabled{opacity:.38;box-shadow:none}
+#remote button[aria-pressed=true]{background:var(--voice);border-color:var(--voice);color:var(--voice-ink);box-shadow:0 2px 0 #0A7A54}
+#refresh-panes{padding:0 .7rem;min-height:32px!important;box-shadow:none!important}
+.remote-tools,.remote-edit{display:flex;gap:.4rem;margin-top:.6rem}
 .remote-tools button{flex:1;min-width:0}
 .remote-navigation{display:flex;align-items:flex-start;justify-content:space-between;
-  gap:1.2rem;padding:.85rem .25rem .25rem}
-.direction-pad{display:flex;flex-direction:column;align-items:center;gap:.25rem}
-.direction-middle{display:flex;align-items:center;gap:.25rem}
-#remote .direction-pad button{width:48px;height:44px;font-size:1.3rem;border-radius:12px;
-  box-shadow:0 2px 0 #080b0d;transition:transform .06s,background .06s}
-.remote-scroll{display:flex;flex-direction:column;gap:.3rem;width:116px}
+  gap:1rem;padding:.75rem .1rem .2rem}
+.direction-pad{display:flex;flex-direction:column;align-items:center;gap:.3rem}
+.direction-middle{display:flex;align-items:center;gap:.3rem}
+#remote .direction-pad button{width:52px;height:46px;font-size:1.3rem;border-radius:12px;
+  background:var(--raise);box-shadow:0 3px 0 #0C142A;transition:transform .06s,background .06s}
+.remote-scroll{display:flex;flex-direction:column;gap:.35rem;flex:1;min-width:0;max-width:150px}
 #remote .remote-scroll button{min-height:44px;white-space:nowrap}
-#remote .remote-scroll [data-scroll=bottom]{min-height:32px;background:transparent;border-color:transparent;color:var(--dim)}
+#remote .remote-scroll [data-scroll=bottom]{min-height:34px;background:transparent;border-color:var(--line);color:var(--dim);box-shadow:none}
 .remote-edit button{flex:1;min-width:0}
-#remote .remote-edit [data-key=space]{flex:1.25}
-#remote .remote-edit [data-key=enter]{background:#26d991;border-color:#49edac;color:#031b11}
-#remote button:active:not(:disabled){transform:translateY(2px);box-shadow:none;background:#405149}
+#remote .remote-edit [data-key=space]{flex:1.3}
+#remote .remote-edit [data-key=enter]{background:var(--voice);border-color:var(--voice);color:var(--voice-ink);box-shadow:0 2px 0 #0A7A54}
+#remote button:active:not(:disabled){transform:translateY(2px);box-shadow:none}
 #remote button{touch-action:manipulation;-webkit-touch-callout:none;user-select:none}
 #remote-status:empty{display:none}
-#remote-status{font-size:.72rem;color:var(--dim);margin-top:.5rem;min-height:1.1em}
+#remote-status{font-size:.74rem;color:var(--dim);margin-top:.5rem;min-height:1.1em}
 
-
-#output-viewer{margin-top:.75rem;border:1px solid #303e51;border-radius:10px;overflow:hidden;background:#080c12}
-.output-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.35rem .6rem;border-bottom:1px solid #293344}
-.output-toolbar h2{margin:0;font-size:.75rem;font-weight:600;color:#c4d1e4}
+/* terminal output — cyan is its hue */
+#output-viewer{margin-top:.7rem;border:1px solid var(--line);border-left:3px solid var(--term);
+  border-radius:12px;overflow:hidden;background:var(--well)}
+.output-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+  padding:.4rem .6rem;border-bottom:1px solid var(--line);background:#121B31}
+.output-toolbar h2{margin:0;font-size:.76rem;font-weight:650;color:var(--term)}
 .output-actions{display:flex;align-items:center;gap:.3rem}
 #output-viewer button{display:flex;align-items:center;justify-content:center;gap:.3rem;min-height:32px;
-  padding:.3rem .45rem;border:1px solid transparent;border-radius:6px;background:transparent;color:#c5d3e8;font:500 .7rem system-ui}
-#output-viewer button[aria-pressed=true]{color:#60edb8;background:#0a2b22;border-color:#22694f}
+  padding:.3rem .5rem;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--dim);font:600 .72rem system-ui}
+#output-viewer button[aria-pressed=true]{color:var(--term);background:#0C2C33;border-color:var(--term)}
 #output-viewer .icon{width:16px;height:16px}
-#output-scroll{height:160px;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y;background:#080c12;scrollbar-color:#526580 #080c12}
+[hidden]{display:none!important}
+#command-panel{margin:.65rem 0}
+.command-row{display:flex;flex-wrap:wrap;gap:.4rem;margin:.5rem 0}
+.command-row input,.command-row select{min-width:0;flex:1;background:var(--key);color:var(--fg);border:1px solid var(--edge);border-radius:9px;padding:.6rem}
+#workspace-dialog,#command-dialog{width:min(90vw,430px);box-sizing:border-box;background:var(--surface);color:var(--fg);
+  border:1px solid var(--line);border-top:3px solid var(--agent);border-radius:16px;padding:1.1rem}
+#workspace-dialog::backdrop,#command-dialog::backdrop{background:#070B14C7}
+#command-dialog button{padding:.7rem 1rem}
+#command-buttons{margin:0}
+#command-buttons button{overflow-wrap:anywhere;max-width:100%;touch-action:manipulation;-webkit-touch-callout:none}
+.control-tabs{display:flex;gap:.4rem;margin:.65rem 0}
+.control-tabs button{flex:1;min-width:0}
+.control-tabs button[aria-expanded=true]{background:#1B2C55!important;border-color:var(--agent)!important;color:var(--fg)!important;box-shadow:0 2px 0 #0C142A!important}
+#composer-panel{margin:.65rem 0}
+#composer,#workspace-dialog input,.output-search input{box-sizing:border-box;width:100%;padding:.7rem;
+  background:var(--key);color:var(--fg);border:1px solid var(--edge);border-radius:10px;font:inherit;margin:.4rem 0}
+#composer{resize:vertical}
+#composer:focus,#workspace-dialog input:focus,.output-search input:focus,.command-row input:focus,select:focus{outline:2px solid var(--agent);outline-offset:1px;border-color:var(--agent)}
+.output-search{padding:0 .6rem}
+.output-search pre{max-height:160px;overflow:auto;white-space:pre-wrap;font-size:.75rem}
+.output-search span{font-size:.75rem;color:var(--dim)}
+.command-hint{font-size:.75rem;color:var(--dim)}
+#output-scroll{height:170px;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y;background:var(--well);scrollbar-color:var(--edge) var(--well)}
 #terminal-output{margin:0;padding:.6rem .75rem;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
-  color:#e8eff9;white-space:pre;min-height:100%;width:max-content;min-width:100%;user-select:text;-webkit-user-select:text}
-#output-error{font-size:.7rem;padding:.35rem .65rem;color:#ffaaa1;border-top:1px solid #293344}
+  color:#E8EFF9;white-space:pre;min-height:100%;width:max-content;min-width:100%;user-select:text;-webkit-user-select:text}
+#output-error{font-size:.72rem;padding:.35rem .65rem;color:var(--alert);border-top:1px solid var(--line)}
 #output-error:empty{display:none}
 #output-dialog{position:fixed;inset:0;margin:0;width:100%;max-width:100%;height:100dvh;max-height:100dvh;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  border:0;background:#080c12;color:var(--fg)}
+  border:0;background:var(--well);color:var(--fg)}
 #output-dialog #output-viewer{height:100%;margin:0;border:0;border-radius:0;display:flex;flex-direction:column}
 #output-dialog .output-toolbar{padding:.7rem}
 #output-dialog #output-scroll{flex:1;height:auto;min-height:0}
-#output-dialog::backdrop{background:#05070be8}
+#output-dialog::backdrop{background:#070B14EE}
 
-/* bottom: the button */
-footer{display:flex;justify-content:center;padding:0 1.2rem clamp(1.2rem,6vh,4rem)}
-#talk{width:min(48vw,160px);aspect-ratio:1;border-radius:50%;border:0;
-background:#1c2532;color:var(--fg);font:600 1rem system-ui;
-display:flex;align-items:center;justify-content:center;text-align:center;padding:1rem;
-box-shadow:0 0 0 0 rgba(46,190,130,.4);transition:background .12s,color .12s,box-shadow .2s,transform .1s;
+/* trackpad — violet is its hue */
+#trackpad-panel{margin-top:.7rem;padding:.9rem 0;border:1px solid var(--line);
+  border-left:3px solid var(--pad);border-radius:14px;background:var(--well);color:var(--fg)}
+#open-trackpad[aria-expanded=true]{background:#2A2350!important;border-color:var(--pad)!important;color:var(--pad)!important}
+#trackpad-panel button{min-height:44px;padding:.5rem 1rem;border:1px solid var(--edge);
+  border-radius:10px;background:var(--key);color:var(--fg);font:600 .82rem system-ui;
+  touch-action:manipulation;box-shadow:0 2px 0 #0C142A}
+#trackpad-panel button:active{transform:translateY(2px);box-shadow:none;background:var(--raise)}
+#trackpad-status{margin:0 .9rem .7rem;color:var(--dim);font-size:.8rem;min-height:2.4em}
+#trackpad-pad{height:min(36dvh,280px);margin:0 .9rem;border:1px solid var(--pad);border-radius:16px;
+  background:radial-gradient(#A98BFF4D 1px,transparent 1px) 0 0/18px 18px,#141C33;
+  display:grid;place-items:center;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#trackpad-pad span{text-align:center;background:transparent;padding:1rem;color:var(--dim);pointer-events:none}
+.trackpad-clicks{display:flex;gap:.6rem;margin:.9rem .9rem 0}
+.trackpad-clicks button{flex:1}
+
+/* bottom: the one bold thing — a full-width push-to-talk bar */
+footer{display:flex;justify-content:center;padding:0 .55rem clamp(.9rem,4vh,2rem);
+position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 34%);padding-top:.7rem;z-index:5}
+#talk{width:100%;max-width:480px;aspect-ratio:auto;height:66px;border-radius:18px;
+border:1px solid var(--edge);background:var(--raise);color:var(--fg);
+font:700 1.05rem/1.2 system-ui;letter-spacing:.01em;
+display:flex;align-items:center;justify-content:center;text-align:center;padding:.8rem;
+box-shadow:0 3px 0 #0C142A;transition:background .12s,color .12s,box-shadow .18s,transform .1s;
 touch-action:none;-webkit-touch-callout:none}
-#talk.live{background:var(--green);color:#04210f;box-shadow:0 0 0 16px rgba(46,190,130,.11);transform:scale(1.03)}
+#talk.live{background:var(--voice);border-color:var(--voice);color:var(--voice-ink);
+box-shadow:0 3px 0 #0A7A54,0 0 0 5px #14E39C2E;transform:translateY(1px)}
 #talk.busy{opacity:.55}
-footer{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 20%);padding-top:.65rem;padding-bottom:1rem;z-index:2}
-#talk{width:120px}
+#talk:active:not(.busy){transform:translateY(3px);box-shadow:none}
+:focus-visible{outline:2px solid var(--agent);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
 @media(max-height:740px){
-  main{justify-content:flex-start;padding:.5rem;gap:.3rem}
+  main{justify-content:flex-start;padding:.45rem;gap:.35rem}
   #remote{padding:.6rem;margin-bottom:0}
-  #remote button{min-height:36px}
-  #vis{height:20px;flex-shrink:0}
-  #talk{width:104px}
-  footer{padding-bottom:.75rem}
+  #remote button{min-height:40px}
+  #vis{height:26px;flex-shrink:0}
+  #talk{height:58px}
+  footer{padding-bottom:.7rem}
   #lap{min-height:0}
 }
 </style></head><body>
 
 <svg aria-hidden=true focusable=false style="position:absolute;width:0;height:0;overflow:hidden"><defs><symbol id="icon-up" viewBox="0 0 24 24"><path d="M6 11l6-6 6 6M12 5v14"/></symbol><symbol id="icon-down" viewBox="0 0 24 24"><path d="m6 13 6 6 6-6M12 5v14"/></symbol><symbol id="icon-left" viewBox="0 0 24 24"><path d="m11 6-6 6 6 6M5 12h14"/></symbol><symbol id="icon-right" viewBox="0 0 24 24"><path d="m13 6 6 6-6 6M5 12h14"/></symbol><symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol><symbol id="icon-chevron-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol><symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol><symbol id="icon-backspace" viewBox="0 0 24 24"><path d="M9 5h11v14H9l-7-7 7-7Z"/><path d="m11 9 6 6m-6 0 6-6"/></symbol><symbol id="icon-enter" viewBox="0 0 24 24"><path d="M20 5v7a3 3 0 0 1-3 3H4m5-5-5 5 5 5"/></symbol><symbol id="icon-bottom" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></symbol><symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 7h7m6 0h3M4 17h3m6 0h7"/><circle cx="14" cy="7" r="3"/><circle cx="10" cy="17" r="3"/></symbol><symbol id="icon-expand" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/></symbol><symbol id="icon-collapse" viewBox="0 0 24 24"><path d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"/></symbol></defs></svg>
-<header>
-  <h1>PhoneMic</h1>
-  <button id=gear aria-label=Settings><svg class=icon aria-hidden=true focusable=false><use href="#icon-settings"/></svg></button>
-</header>
+<button id=gear aria-label=Settings><svg class=icon aria-hidden=true focusable=false><use href="#icon-settings"/></svg></button>
 
 <div id=panel hidden>
   <section id=connection-card hidden aria-label="Connection">
     <strong id=connection-title>Direct over Wi-Fi</strong>
-    <p id=connection-help>On the same Wi-Fi as your laptop? Switch to a direct connection for less network delay. No Tailscale needed.</p>
+    <p id=connection-help>Same Wi-Fi, lower latency. No Tailscale.</p>
     <button id=switch-connection>Use Wi-Fi connection</button>
     <small id=connection-address></small>
   </section>
@@ -302,24 +369,23 @@ footer{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg)
   <div class=row><label for=dictation>Trigger laptop dictation</label>
     <input type=checkbox id=dictation></div>
   <div class=key>
-    <span><i style="background:#3a4048"></i>not sent</span>
-    <span><i style="background:#e0a33a"></i>sent</span>
-    <span><i style="background:#2ebe82"></i>received</span>
-    <span>· 8s window, 1s per line</span>
+    <span><i style="background:#3B486E"></i>not sent</span>
+    <span><i style="background:#FFC24D"></i>sent</span>
+    <span><i style="background:#14E39C"></i>received</span>
   </div>
   <button id=dis>Disconnect</button>
 </div>
 
 <main>
   <section id=remote aria-label="Herdr remote control">
-    <div class=remote-head><label for=panes>Herdr</label><button id=refresh-panes>Refresh</button></div>
+    <div class=remote-head><label for=panes>Herdr</label><div class=output-actions><button id=toggle-output aria-expanded=false aria-controls=output-home>Show output</button><button id=refresh-panes>Refresh</button></div></div>
     <button id=panes value="" aria-label="Switch workspace or agent" aria-haspopup=dialog aria-controls=pane-picker>
       <span id=picked-dot class=agent-dot aria-hidden=true></span>
       <span class=context-copy><span id=picked-name class=context-name>Choose an agent</span>
-      <span id=picked-detail class=context-detail>Spaces &amp; agents on your laptop</span></span>
+      <span id=picked-detail class=context-detail>no pane selected</span></span>
       <span class=context-chevron aria-hidden=true><svg class=icon aria-hidden=true focusable=false><use href="#icon-chevron-down"/></svg></span>
     </button>
-    <div id=output-home>
+    <div id=output-home hidden>
       <section id=output-viewer aria-label="Agent terminal output">
         <div class=output-toolbar><h2>Live output</h2><div class=output-actions>
           <button id=follow-output aria-pressed=true aria-label="Follow latest output"><svg class=icon aria-hidden=true focusable=false><use href="#icon-bottom"/></svg><span>Follow</span></button>
@@ -328,14 +394,30 @@ footer{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg)
         <div id=output-scroll tabindex=0 aria-label="Terminal screen, scroll to read">
           <pre id=terminal-output>Select a pane to see its output.</pre>
         </div>
+        <div class=output-search><input id=search-output type=search placeholder="Search this screen" aria-label="Search current output"><span id=search-count role=status></span><pre id=search-results hidden></pre></div>
         <div id=output-error role=status></div>
       </section>
     </div>
     <div class=remote-tools aria-label="Modifiers and shortcuts">
       <button data-key=esc>Esc</button><button data-key=tab>Tab</button>
       <button data-mod=ctrl aria-pressed=false>Ctrl</button><button data-mod=alt aria-pressed=false>Alt</button>
-      <button data-key=c data-ctrl=true>Ctrl+C</button>
+      <button data-key=c data-ctrl=true>Ctrl+C</button><button data-key=u data-ctrl=true>Ctrl+U</button>
     </div>
+    <div class=control-tabs role=group aria-label="Extra controls">
+      <button id=commands-tab aria-expanded=false aria-controls=command-panel>Commands &amp; panes</button>
+      <button id=composer-tab aria-expanded=false aria-controls=composer-panel>Type a message</button>
+    </div>
+    <section id=command-panel hidden aria-labelledby=commands-tab>
+      <div class=command-row><div id=command-buttons class=command-row></div><button id=add-command aria-label="Add command" aria-haspopup=dialog>+</button></div>
+      <div class=command-row><button id=new-workspace>New space</button><button id=notifications aria-pressed=false>Completion alerts: off</button></div>
+      <p id=notification-status class=command-hint role=status></p>
+      <div class=command-row><button data-pane-action=split>New pane</button><button data-pane-action=close>Close pane</button></div>
+    </section>
+    <section id=composer-panel hidden aria-labelledby=composer-tab>
+      <label for=composer class=command-hint>Draft</label>
+      <textarea id=composer rows=4 maxlength=20000 placeholder="Write or paste a message"></textarea>
+      <div class=command-row><button id=insert-text>Type into pane</button><button id=clear-draft>Clear draft</button></div>
+    </section>
     <div class=remote-navigation>
       <div class=direction-pad role=group aria-label="Arrow keys">
         <button data-key=up aria-label="Up arrow"><svg class=icon aria-hidden=true focusable=false><use href="#icon-up"/></svg></button>
@@ -353,9 +435,15 @@ footer{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg)
     </div>
     <div class=remote-edit aria-label="Editing keys">
       <button data-key=backspace aria-label=Backspace><svg class=icon aria-hidden=true focusable=false><use href="#icon-backspace"/></svg></button>
+      <button id=open-trackpad aria-expanded=false aria-controls=trackpad-panel>Trackpad</button>
       <button data-key=space>Space</button>
       <button data-key=enter><span>Enter</span><svg class=icon aria-hidden=true focusable=false><use href="#icon-enter"/></svg></button>
     </div>
+<section id=trackpad-panel hidden aria-label="Laptop trackpad">
+  <p id=trackpad-status role=status>Slide to move. Tap to click.</p>
+  <div id=trackpad-pad aria-label="Slide to move the laptop pointer, tap to click"></div>
+  <div class=trackpad-clicks><button id=trackpad-left>Left click</button><button id=trackpad-right>Right click</button></div>
+</section>
     <div id=remote-status role=status>Choose a pane to control.</div>
   </section>
   <canvas id=vis width=840 height=176></canvas>
@@ -365,7 +453,26 @@ footer{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg)
 
 <footer><button id=talk>Touch to talk</button></footer>
 
+
 <dialog id=output-dialog aria-label="Expanded terminal output"></dialog>
+<dialog id=workspace-dialog aria-labelledby=workspace-heading>
+  <h2 id=workspace-heading>New space</h2>
+  <form id=create-workspace>
+    <label for=workspace-name>Name</label><input id=workspace-name maxlength=100 required>
+    <label for=workspace-directory>Directory, optional</label><input id=workspace-directory maxlength=4096 placeholder="Use selected pane's directory">
+    <p id=workspace-error role=status></p>
+    <div class=command-row><button type=button id=cancel-workspace>Cancel</button><button id=save-workspace type=submit>Create</button></div>
+  </form>
+</dialog>
+<dialog id=command-dialog aria-labelledby=command-heading>
+  <h2 id=command-heading>Add command</h2>
+  <form id=save-command>
+    <label for=custom-command>Command text</label>
+    <div class=command-row><input id=custom-command maxlength=2000 placeholder="Your command" required></div>
+    <p id=command-error role=status></p>
+    <div class=command-row><button type=button id=cancel-command>Cancel</button><button type=submit>Save</button></div>
+  </form>
+</dialog>
 <dialog id=pane-picker aria-labelledby=picker-heading>
   <div class=picker-handle></div>
   <div class=picker-heading><div><h2 id=picker-heading>Herdr</h2><p id=picker-summary>Live Herdr sessions</p></div>
@@ -384,8 +491,9 @@ const talk=$('talk'),st=$('st'),lap=$('lap'),hf=$('hf'),dis=$('dis'),q=$('q'),
 let ws,ctx,node,src,stream,lock=null;
 let ready=false,talking=false,connecting=false,gen=0,pressed=false,starting=false;
 let dictationWait=null, audioInit=null, capturing=false;
+let reconnectTimer=null,reconnectDelay=1000,manualDisconnect=false,lastMessageAt=0;
 const paneSelect=$('panes'),remoteStatus=$('remote-status'),refreshPanes=$('refresh-panes');
-const remoteButtons=Array.from(document.querySelectorAll('#remote [data-key],#remote [data-mod],#remote [data-scroll]'));
+const remoteButtons=Array.from(document.querySelectorAll('#remote [data-key],#remote [data-mod],#remote [data-scroll],#remote [data-pane-action]'));
 let inventory=[],pickerView='agents',workspaceFilter=null,queuedPane=null;
 const picker=$('pane-picker');
 const outputViewer=$('output-viewer'),outputScroll=$('output-scroll'),terminalOutput=$('terminal-output');
@@ -453,14 +561,14 @@ function confirmRx(rx){
 function draw(){
   if(!talking) push(0,false);        // keep the timeline scrolling when idle
   const W=vis.width,H=vis.height,bw=W/BARS;
-  g.fillStyle='#10141b'; g.fillRect(0,0,W,H);
-  g.fillStyle='#293445';
+  g.fillStyle='#0B111F'; g.fillRect(0,0,W,H);
+  g.fillStyle='#1F2B4A';
   for(let k=PER_SEC;k<BARS;k+=PER_SEC) g.fillRect(W-k*bw,0,1,H);
-  g.fillStyle='#435166'; g.fillRect(0,H/2-1,W,2);
+  g.fillStyle='#37477A'; g.fillRect(0,H/2-1,W,2);
   for(let i=0;i<hist.length;i++){
     const h=hist[i],x=W-(hist.length-i)*bw;
     const amp=Math.max(2,Math.min(1,h.p*1.5)*(H*0.9));
-    g.fillStyle=h.s===2?'#2ebe82':h.s===1?'#e0a33a':'#3a4048';
+    g.fillStyle=h.s===2?'#14E39C':h.s===1?'#FFC24D':'#3B486E';
     g.fillRect(x+bw*0.15,(H-amp)/2,Math.max(1,bw*0.7),amp);
   }
   requestAnimationFrame(draw);
@@ -482,9 +590,27 @@ function renderLaptop(m){
 }
 
 // The socket and audio graph stay up; the microphone itself does not.
+function scheduleReconnect(delay=reconnectDelay){
+  if(manualDisconnect||document.hidden||navigator.onLine===false||reconnectTimer!==null)return;
+  reconnectTimer=setTimeout(()=>{
+    reconnectTimer=null;
+    if(manualDisconnect||document.hidden||navigator.onLine===false)return;
+    reconnectDelay=Math.min(reconnectDelay*2,15000);
+    connect().catch(()=>{});
+  },delay);
+}
+function resumeConnection(immediate=true){
+  if(manualDisconnect||document.hidden||navigator.onLine===false)return;
+  if(ready&&(!ws||ws.readyState!==1||Date.now()-lastMessageAt>15000))teardown('Reconnecting…');
+  if(!ready){
+    if(immediate){clearTimeout(reconnectTimer);reconnectTimer=null;scheduleReconnect(0);}
+    else scheduleReconnect();
+  }
+}
 function connect(){
+  manualDisconnect=false;clearTimeout(reconnectTimer);reconnectTimer=null;
   if(connectionPromise) return connectionPromise;
-  connectionPromise=connectSocket().finally(()=>{connectionPromise=null});
+  connectionPromise=connectSocket().finally(()=>{connectionPromise=null;if(!ready)scheduleReconnect()});
   return connectionPromise;
 }
 async function connectSocket(){
@@ -497,7 +623,11 @@ async function connectSocket(){
   ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'+location.search);
   const socket=ws;
   ws.binaryType='arraybuffer';
-  ws.onmessage=e=>{ if(ws!==socket) return; try{ const m=JSON.parse(e.data);
+  ws.onmessage=e=>{ if(ws!==socket) return; lastMessageAt=Date.now(); try{ const m=JSON.parse(e.data);
+    if(m.type==='mouse'){
+      if(mousePending){const pending=mousePending;mousePending=null;m.error?pending.reject(new Error(m.error)):pending.resolve();}
+      return;
+    }
     if(m.type==='herdr-update'){ applyHerdrInventory(m.result); return; }
     if(m.type==='herdr'){
       const pending=herdrPending.get(m.id);
@@ -511,7 +641,7 @@ async function connectSocket(){
     }
     renderLaptop(m); confirmRx(m.rx);
   }catch(_){} };
-  ws.onclose=()=>{ if(ws===socket) teardown('Connection closed — press to reconnect','warn'); };
+  ws.onclose=()=>{ if(ws===socket) teardown('Connection lost — reconnecting…','warn'); };
   ws.onerror=()=>{ if(ws===socket) say('Connection error','warn'); };
   try{ await new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>{socket.close();reject(new Error('Connection timed out'))},10000);
@@ -519,9 +649,9 @@ async function connectSocket(){
     socket.addEventListener('close',()=>{clearTimeout(timer);reject(new Error('Connection closed'))},{once:true});
   });
   if(ws!==socket||socket.readyState!==1) throw new Error('Connection closed'); }
-  catch(e){ connecting=false; talk.classList.remove('busy'); say('Could not reach the computer','warn'); return false; }
+  catch(e){ if(ws===socket){connecting=false;talk.classList.remove('busy');say('Could not reach the computer — retrying…','warn');} return false; }
   ws.send(JSON.stringify({rate:ctx?ctx.sampleRate:Q.rate,proc:Q.proc}));
-  ready=true; connecting=false; talk.classList.remove('busy');
+  ready=true; reconnectDelay=1000;lastMessageAt=Date.now();connecting=false; talk.classList.remove('busy');
   if(!starting&&!capturing&&!talking) say('Ready — touch to record');
   paint(); return true;
 }
@@ -646,6 +776,8 @@ function end(){
   }
 }
 function teardown(msg,c){
+  resetTrackpad();
+  if(mousePending){mousePending.reject(new Error('Computer disconnected'));mousePending=null;}
   pressed=false; ready=false; connecting=false; talking=false; micOff();
   outputGeneration++;if(outputPane)$('output-error').textContent='Disconnected — showing the last screen';
   if(dictationWait){ dictationWait.reject(new Error("Computer disconnected")); dictationWait=null; }
@@ -655,13 +787,76 @@ function teardown(msg,c){
   try{oldSocket&&oldSocket.close()}catch(e){} try{ctx&&ctx.close()}catch(e){}
   ctx=null; node=null;
   try{lock&&lock.release()}catch(e){} lock=null;
-  lap.textContent=''; say(msg||'Disconnected',c); paint();
+  lap.textContent=''; say(msg||'Disconnected',c); paint();scheduleReconnect();
 }
+
+const trackpadPanel=$('trackpad-panel'),trackpadPad=$('trackpad-pad');
+let mousePending=null,mousePointer=null,mouseDX=0,mouseDY=0,mouseClicks=[],mouseSending=false;
+function resetTrackpad(){mousePointer=null;mouseDX=mouseDY=0;mouseClicks=[];}
+function mouseCommand(command){
+  return new Promise((resolve,reject)=>{
+    if(!ready||!ws||ws.readyState!==1){reject(new Error('Disconnected. Close and reopen the trackpad.'));return;}
+    const timer=setTimeout(()=>{mousePending=null;reject(new Error('Trackpad timed out. Reopen to reconnect.'));ws&&ws.close();},3000);
+    mousePending={resolve:()=>{clearTimeout(timer);resolve()},reject:e=>{clearTimeout(timer);reject(e)}};
+    ws.send(JSON.stringify({mouse:command}));
+  });
+}
+async function flushMouse(){
+  if(mouseSending||trackpadPanel.hidden)return;
+  mouseSending=true;
+  try{
+    while(!trackpadPanel.hidden&&(mouseDX||mouseDY||mouseClicks.length)){
+      if(mouseDX||mouseDY){
+        const dx=Math.max(-500,Math.min(500,mouseDX)),dy=Math.max(-500,Math.min(500,mouseDY));
+        mouseDX-=dx;mouseDY-=dy;await mouseCommand({action:'move',dx,dy});
+      }else await mouseCommand({action:'click',button:mouseClicks.shift()});
+    }
+  }catch(e){resetTrackpad();$('trackpad-status').textContent=e.message;}
+  finally{mouseSending=false;}
+}
+function mouseClick(button){if(mouseClicks.length<4){mouseClicks.push(button);flushMouse();}}
+$('open-trackpad').onclick=async()=>{
+  trackpadPanel.hidden=!trackpadPanel.hidden;
+  $('open-trackpad').setAttribute('aria-expanded',String(!trackpadPanel.hidden));
+  resetTrackpad();
+  if(trackpadPanel.hidden)return;
+  $('trackpad-status').textContent='Connecting…';
+  if(await connect())$('trackpad-status').textContent='Slide to move. Tap to click.';
+  else $('trackpad-status').textContent='Could not connect. Close and try again.';
+};
+$('trackpad-left').onclick=()=>mouseClick('left');
+$('trackpad-right').onclick=()=>mouseClick('right');
+trackpadPad.addEventListener('contextmenu',e=>e.preventDefault());
+trackpadPad.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  if(!e.isPrimary){if(mousePointer)mousePointer.moved=true;return;}
+  if(!ready)return;
+  trackpadPad.setPointerCapture(e.pointerId);
+  mousePointer={id:e.pointerId,x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,time:performance.now(),moved:false};
+});
+trackpadPad.addEventListener('pointermove',e=>{
+  if(!mousePointer||mousePointer.id!==e.pointerId)return;
+  const p=mousePointer;
+  if(Math.hypot(e.clientX-p.startX,e.clientY-p.startY)>6)p.moved=true;
+  if(p.moved){mouseDX+=Math.round((e.clientX-p.x)*1.5);mouseDY+=Math.round((e.clientY-p.y)*1.5);}
+  p.x=e.clientX;p.y=e.clientY;
+  flushMouse();
+});
+trackpadPad.addEventListener('pointerup',e=>{
+  if(!mousePointer||mousePointer.id!==e.pointerId)return;
+  const tap=!mousePointer.moved&&performance.now()-mousePointer.time<350;
+  mousePointer=null;if(tap)mouseClick('left');
+});
+trackpadPad.addEventListener('pointercancel',resetTrackpad);
+trackpadPad.addEventListener('lostpointercapture',()=>{mousePointer=null;});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)resetTrackpad();});
 
 function paintRemote(){
   const busy=starting||talking||capturing||remoteBusy;
   paneSelect.disabled=refreshPanes.disabled=busy;
-  for(const button of remoteButtons){
+  $('insert-text').disabled=busy||!paneSelect.value;
+  $('new-workspace').disabled=$('save-workspace').disabled=busy;
+  for(const button of [...remoteButtons,...document.querySelectorAll('#command-buttons button')]){
     button.disabled=busy||!paneSelect.value;
     if(button.dataset.mod) button.setAttribute('aria-pressed',String(modifiers.has(button.dataset.mod)));
   }
@@ -696,6 +891,152 @@ async function remoteAction(command){
   }finally{remoteBusy=false;paintRemote();if(command.action==='focus'||command.action==='scroll'||command.action==='key') refreshOutput(true);if(queuedPane){const id=queuedPane;queuedPane=null;choosePane(id)}}
 }
 refreshPanes.onclick=()=>remoteAction({action:'list'});
+function setOutputOpen(open,refresh){
+  $('output-home').hidden=!open;
+  $('toggle-output').textContent=open?'Hide output':'Show output';
+  $('toggle-output').setAttribute('aria-expanded',String(open));
+  if(open){ if(refresh)refreshOutput(true); } else outputGeneration++;
+}
+$('toggle-output').onclick=()=>{
+  const open=$('output-home').hidden;
+  try{localStorage.setItem('pm.output',open?'1':'0')}catch(e){}
+  setOutputOpen(open,true);
+};
+try{ if(localStorage.getItem('pm.output')==='1') setOutputOpen(true,false); }catch(e){}
+function haptic(duration=10){try{navigator.vibrate?.(duration);}catch{}}
+document.addEventListener('pointerdown',e=>{
+  const button=e.target.closest?.('button,summary');
+  if(button&&!button.disabled&&button!==talk&&e.isPrimary!==false)haptic();
+},{passive:true});
+
+const defaultCommands=['/clear','/model','cx','cc-yolo'];
+let savedCommands=[...defaultCommands];
+try{
+  const current=localStorage.getItem('phonemic-command-buttons');
+  const saved=JSON.parse(current??localStorage.getItem('phonemic-commands')??'[]');
+  if(Array.isArray(saved)){
+    const valid=saved.filter(c=>typeof c==='string'&&c.trim()&&c.length<=2000);
+    savedCommands=[...new Set(current===null?[...defaultCommands,...valid]:valid)].slice(0,50);
+  }
+}catch{}
+function renderCommands(){
+  const list=$('command-buttons');list.replaceChildren();
+  for(const command of savedCommands){
+    const button=document.createElement('button');button.type='button';button.textContent=command;
+    let timer=null,held=false,startX=0,startY=0;
+    const cancel=()=>{clearTimeout(timer);timer=null;};
+    const remove=()=>{
+      cancel();held=true;haptic(25);
+      if(confirm('Delete command "'+command+'"?'))storeCommands(savedCommands.filter(c=>c!==command));
+    };
+    button.addEventListener('pointerdown',e=>{
+      if(button.disabled||e.isPrimary===false||e.button!==0)return;
+      cancel();held=false;startX=e.clientX;startY=e.clientY;
+      timer=setTimeout(remove,600);
+    });
+    button.addEventListener('pointermove',e=>{if(Math.hypot(e.clientX-startX,e.clientY-startY)>10){cancel();held=true;}});
+    for(const event of ['pointerup','pointerleave'])button.addEventListener(event,cancel);
+    button.addEventListener('pointercancel',()=>{cancel();held=true;});
+    button.addEventListener('contextmenu',e=>{e.preventDefault();if(!held&&!button.disabled)remove();});
+    button.onclick=()=>{
+      cancel();if(held){held=false;return;}
+      remoteAction({action:'command',pane:paneSelect.value,text:command});
+    };
+    list.append(button);
+  }
+  paintRemote();
+}
+function storeCommands(next){
+  try{localStorage.setItem('phonemic-command-buttons',JSON.stringify(next));savedCommands=next;renderCommands();return true;}
+  catch{remoteStatus.textContent=$('command-error').textContent='Could not save commands in this browser.';return false;}
+}
+$('add-command').onclick=()=>{$('custom-command').value='';$('command-error').textContent='';$('command-dialog').showModal();$('custom-command').focus();};
+$('cancel-command').onclick=()=>$('command-dialog').close();
+$('save-command').onsubmit=e=>{
+  e.preventDefault();const command=$('custom-command').value.trim();
+  if(!command||command.length>2000)return;
+  if(savedCommands.length>=50&&!savedCommands.includes(command)){$('command-error').textContent='Delete a command before adding more.';return;}
+  if(storeCommands([...new Set([...savedCommands,command])]))$('command-dialog').close();
+};
+for(const button of document.querySelectorAll('[data-pane-action]'))button.onclick=async()=>{
+  const pane=paneSelect.value,action=button.dataset.paneAction;
+  if(action==='close'&&!confirm('Close this pane and end its running terminal session?'))return;
+  const result=await remoteAction({action,pane});
+  if(result)await remoteAction({action:'list'});
+};
+renderCommands();
+
+function toggleControlPanel(name){
+  const opening=$(name+'-panel').hidden;
+  for(const [tab,panel] of [['commands-tab','command-panel'],['composer-tab','composer-panel']]){
+    const active=opening&&panel===name+'-panel';
+    $(panel).hidden=!active;$(tab).setAttribute('aria-expanded',String(active));
+  }
+}
+$('commands-tab').onclick=()=>toggleControlPanel('command');
+$('composer-tab').onclick=()=>toggleControlPanel('composer');
+$('insert-text').onclick=()=>{
+  const text=$('composer').value;if(text.trim())remoteAction({action:'text',pane:paneSelect.value,text});
+};
+$('clear-draft').onclick=()=>{$('composer').value='';saveDraft();};
+function saveDraft(){ try{localStorage.setItem('pm.draft',$('composer').value)}catch(e){} }
+$('composer').addEventListener('input',saveDraft);
+try{ const d=localStorage.getItem('pm.draft'); if(d)$('composer').value=d; }catch(e){}
+$('new-workspace').onclick=()=>{
+  $('workspace-name').value='';$('workspace-directory').value='';$('workspace-error').textContent='';
+  $('workspace-dialog').showModal();$('workspace-name').focus();
+};
+$('cancel-workspace').onclick=()=>$('workspace-dialog').close();
+$('create-workspace').onsubmit=async e=>{
+  e.preventDefault();const label=$('workspace-name').value.trim();if(!label)return;
+  const result=await remoteAction({action:'workspace',pane:paneSelect.value||undefined,label,cwd:$('workspace-directory').value.trim()});
+  if(result){$('workspace-dialog').close();await remoteAction({action:'list'});}
+  else $('workspace-error').textContent=remoteStatus.textContent||'Could not create space.';
+};
+let completionAlerts=false;
+function paintAlerts(){
+  $('notifications').textContent='Completion alerts: '+(completionAlerts?'on':'off');
+  $('notifications').setAttribute('aria-pressed',String(completionAlerts));
+  $('notification-status').textContent=completionAlerts?'Watching while this page stays connected.':'';
+}
+$('notifications').onclick=async()=>{
+  completionAlerts=!completionAlerts;
+  try{localStorage.setItem('pm.alerts',completionAlerts?'1':'0')}catch(e){}
+  paintAlerts();
+  if(completionAlerts&&typeof Notification!=='undefined'&&Notification.permission==='default'){
+    try{await Notification.requestPermission();}catch{}
+  }
+};
+// Only restore "on" while the notification grant still stands, so the label
+// never claims alerts the browser would drop.
+try{
+  completionAlerts = localStorage.getItem('pm.alerts')==='1'
+    && (typeof Notification==='undefined'||Notification.permission==='granted');
+}catch(e){}
+paintAlerts();
+function notifyCompletions(panes){
+  if(!completionAlerts)return;
+  for(const pane of panes){
+    const previous=inventory.find(p=>p.id===pane.id);
+    if(previous?.state!=='working'||!['idle','done','blocked'].includes(pane.state))continue;
+    const message=pane.workspace+' · '+(pane.agent||'Agent')+(pane.state==='blocked'?' needs input':' finished');
+    $('notification-status').textContent=message;
+    try{navigator.vibrate?.([100,50,100]);}catch{}
+    if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
+      try{new Notification('PhoneMic',{body:message,tag:'phonemic-'+pane.id});}catch{}
+    }
+  }
+}
+function searchOutput(){
+  const query=$('search-output').value.trim().toLowerCase();
+  const results=$('search-results');results.hidden=!query;
+  if(!query){results.textContent='';$('search-count').textContent='';return;}
+  const plain=terminalRuns(outputText||'').map(run=>run.text).join('');
+  const matches=plain.split('\\n').map((line,i)=>({line,number:i+1})).filter(row=>row.line.toLowerCase().includes(query));
+  results.textContent=matches.map(row=>row.number+': '+row.line).join('\\n');
+  $('search-count').textContent=matches.length+' matching lines in this screen';
+}
+$('search-output').oninput=()=>{if($('search-output').value)setOutputFollow(false);searchOutput();};
 const stateNames={idle:'Idle',working:'Working',done:'Done',blocked:'Needs input',unknown:'Terminal'};
 function agentState(value){return Object.hasOwn(stateNames,value)?value:'unknown'}
 function syncFocusedPane(panes){
@@ -706,13 +1047,14 @@ function syncFocusedPane(panes){
 }
 function applyHerdrInventory(result){
   if(!result||!Array.isArray(result.panes)) return;
+  notifyCompletions(result.panes);
   syncFocusedPane(result.panes);
   renderPicked();if(picker.open) renderPicker();
 }
 function renderPicked(){
   const pane=inventory.find(p=>p.id===paneSelect.value);
   $('picked-name').textContent=pane?pane.workspace:'Choose an agent';
-  $('picked-detail').textContent=pane?paneDetail(pane):'Spaces & agents on your laptop';
+  $('picked-detail').textContent=pane?paneDetail(pane):'no pane selected';
   $('picked-dot').className='agent-dot '+agentState(pane?.state);
   selectOutputPane(paneSelect.value);
 }
@@ -788,10 +1130,10 @@ function selectOutputPane(pane){
   if(outputPane===pane)return;
   outputPane=pane;outputGeneration++;outputText=null;setOutputFollow(true);
   terminalOutput.textContent=pane?'Loading terminal…':'Select a pane to see its output.';
-  $('output-error').textContent='';
+  $('output-error').textContent='';searchOutput();
 }
 async function refreshOutput(force=false){
-  if(outputBusy||!outputPane||!ready||document.hidden||starting||talking||capturing||remoteBusy||(!outputFollow&&!force))return;
+  if($('output-home').hidden||outputBusy||!outputPane||!ready||document.hidden||starting||talking||capturing||remoteBusy||(!outputFollow&&!force))return;
   outputBusy=true;
   const pane=outputPane,generation=outputGeneration;
   try{
@@ -799,7 +1141,7 @@ async function refreshOutput(force=false){
     if(outputPane!==pane||generation!==outputGeneration||(!outputFollow&&!force))return;
     if(result.pane!==pane||typeof result.text!=='string')throw new Error('Invalid terminal output');
     if(result.text!==outputText){
-      outputText=result.text;renderTerminal(result.text||'This pane has no output yet.');
+      outputText=result.text;renderTerminal(result.text||'This pane has no output yet.');searchOutput();
     }
     if(outputFollow)outputScroll.scrollTop=outputScroll.scrollHeight;
     $('output-error').textContent=result.truncated?'Showing the available screen snapshot.':'';
@@ -847,7 +1189,7 @@ function contextRow(name,detail,state,selected,activate){
   const sub=document.createElement('span');sub.className='context-detail';sub.textContent=detail;
   copy.append(title,sub);
   const mark=document.createElement('span');mark.className='context-mark';mark.append(makeIcon(selected?'check':'chevron-right'));
-  row.append(dot,copy,mark);row.onclick=()=>{try{navigator.vibrate&&navigator.vibrate(12)}catch(_){}activate()};
+  row.append(dot,copy,mark);row.onclick=activate;
   return row;
 }
 function renderPicker(){
@@ -889,10 +1231,8 @@ setInterval(()=>{
   }).catch(()=>{});
 },5000);
 for(const button of remoteButtons){
-  button.addEventListener('pointerdown',()=>{
-    if(!button.disabled){try{navigator.vibrate&&navigator.vibrate(12)}catch(_){}}
-  });
   button.addEventListener('contextmenu',e=>e.preventDefault());
+  if(button.dataset.paneAction)continue;
   button.onclick=()=>{
     if(button.dataset.mod){
       const mod=button.dataset.mod;modifiers.has(mod)?modifiers.delete(mod):modifiers.add(mod);paintRemote();return;
@@ -925,7 +1265,7 @@ dictation.onchange=()=>{
 };
 q.onchange=()=>{ try{localStorage.setItem('pm.q',q.value)}catch(e){}
   if(ready) teardown('Quality changed — hold to reconnect'); };
-dis.onclick=()=>teardown('Disconnected');
+dis.onclick=()=>{manualDisconnect=true;clearTimeout(reconnectTimer);reconnectTimer=null;teardown('Disconnected');};
 
 // Keep the screen awake only while actually streaming.
 async function wake(on){
@@ -936,8 +1276,12 @@ const _b=begin, _e=end;
 begin=async()=>{ await _b(); if(talking) wake(true); };
 end=()=>{ _e(); wake(false); };
 document.addEventListener('visibilitychange',()=>{
-  if(document.hidden&&talking) say('Backgrounded — Android may cut the audio','warn');
+  if(document.hidden){clearTimeout(reconnectTimer);reconnectTimer=null;if(talking)say('Backgrounded — Android may cut the audio','warn');}
+  else resumeConnection();
 });
+globalThis.addEventListener?.('pageshow',resumeConnection);
+globalThis.addEventListener?.('online',resumeConnection);
+setInterval(()=>resumeConnection(false),5000);
 paint();
 </script></body></html>"""
 
@@ -1081,6 +1425,19 @@ class Herdr:
                                "title": tab_labels.get(p.get("tab_id")) or
                                          p.get("terminal_title_stripped") or p.get("agent") or "Terminal",
                                "focused": p.get("focused", False)} for p in panes["panes"]]}
+        if action == "workspace":
+            label, cwd = message.get("label"), message.get("cwd", "")
+            if not isinstance(label, str) or not label.strip() or len(label) > 100 or any(ord(c) < 32 for c in label):
+                raise RuntimeError("Use a space name of up to 100 characters")
+            if not isinstance(cwd, str) or len(cwd) > 4096 or any(ord(c) < 32 for c in cwd):
+                raise RuntimeError("Invalid directory")
+            if cwd and not pathlib.Path(cwd).is_absolute():
+                raise RuntimeError("Use an absolute directory path")
+            if not cwd and message.get("pane"):
+                current = (await self.request("pane.get", {"pane_id": message["pane"]}))["pane"]
+                cwd = current.get("foreground_cwd") or current.get("cwd") or ""
+            result = await self.request("workspace.create", {"label": label.strip(), "cwd": cwd or None, "focus": True})
+            return {"pane": result["root_pane"]["pane_id"]}
         pane = message.get("pane")
         if not isinstance(pane, str) or not pane or len(pane) > 128:
             raise RuntimeError("Select a pane first")
@@ -1093,7 +1450,26 @@ class Herdr:
                 raise RuntimeError("Herdr returned invalid terminal output")
             return {"pane": pane, "text": text[:120000],
                     "truncated": bool(output.get("truncated")) or len(text) > 120000}
-        if action == "focus":
+        if action == "split":
+            current = (await self.request("pane.get", {"pane_id": pane}))["pane"]
+            result = await self.request("pane.split", {"target_pane_id": pane,
+                "workspace_id": current["workspace_id"], "direction": "down",
+                "cwd": current.get("foreground_cwd") or current.get("cwd"), "focus": True})
+            return {"pane": result["pane"]["pane_id"]}
+        elif action == "close":
+            await self.request("pane.close", {"pane_id": pane})
+        elif action == "text":
+            text = message.get("text")
+            if not isinstance(text, str) or not text.strip() or len(text) > 20000 or any(
+                    (ord(c) < 32 and c not in "\n\t") or ord(c) == 127 for c in text):
+                raise RuntimeError("Use text of up to 20000 characters without terminal control codes")
+            await self.request("pane.send_text", {"pane_id": pane, "text": text})
+        elif action == "command":
+            text = message.get("text")
+            if not isinstance(text, str) or not text.strip() or len(text) > 2000 or any(ord(c) < 32 or ord(c) == 127 for c in text):
+                raise RuntimeError("Use a single-line command of up to 2000 characters")
+            await self.request("pane.send_text", {"pane_id": pane, "text": text})
+        elif action == "focus":
             await self.request("pane.focus", {"pane_id": pane})
         elif action == "scroll":
             direction = message.get("direction")
@@ -1101,6 +1477,31 @@ class Herdr:
                 raise RuntimeError("Unknown scroll direction")
             current = await self.request("pane.get", {"pane_id": pane})
             scroll = current["pane"].get("scroll", {})
+            if current["pane"].get("agent") == "claude" and not scroll.get("max_offset_from_bottom", 0):
+                layout = (await self.request("pane.layout", {"pane_id": pane}))["layout"]
+                rect = next(p["rect"] for p in layout["panes"] if p["pane_id"] == pane)
+                x, y = max(1, rect["width"] // 2), max(1, rect["height"] // 2)
+                # Herdr 0.9 sends text as raw PTY bytes but rejects wheel/PageUp keys.
+                # SGR mouse reports go straight to Claude, independent of desktop focus.
+                wheel = f"\x1b[<{64 if direction == 'up' else 65};{x};{y}M"
+                if direction == "bottom":
+                    async def screen():
+                        result = await self.request("pane.read", {"pane_id": pane,
+                            "source": "visible", "format": "text", "lines": 160})
+                        return result["read"]["text"]
+                    previous = await screen()
+                    for _ in range(10):
+                        await self.request("pane.send_text", {"pane_id": pane, "text": wheel * 40})
+                        await asyncio.sleep(0.1)
+                        current_screen = await screen()
+                        if current_screen == previous:
+                            break
+                        previous = current_screen
+                    else:
+                        raise RuntimeError("Moved toward latest output. Tap Latest again to continue.")
+                else:
+                    await self.request("pane.send_text", {"pane_id": pane, "text": wheel * 3})
+                return {"pane": pane}
             offset = scroll.get("offset_from_bottom", 0)
             step = max(1, scroll.get("viewport_rows", 24) // 2)
             offset = 0 if direction == "bottom" else offset + (step if direction == "up" else -step)
@@ -1112,7 +1513,7 @@ class Herdr:
                     m not in ("ctrl", "alt") for m in modifiers):
                 raise RuntimeError("Unknown modifier")
             if key not in ("esc", "tab", "left", "right", "up", "down", "space", "backspace", "enter"):
-                if key != "c" or "ctrl" not in modifiers:
+                if key not in ("c", "u") or "ctrl" not in modifiers:
                     raise RuntimeError("Unknown key")
             keys = "+".join([m for m in ("ctrl", "alt") if m in modifiers] + [key])
             await self.request("pane.send_keys", {"pane_id": pane, "keys": [keys]})
@@ -1181,6 +1582,39 @@ class Dictation:
         self.reader = self.writer = None
 
 
+async def mouse_control(command):
+    """Accept only bounded relative movement and complete clicks on the local X11 desktop."""
+    if not TOKEN:
+        raise RuntimeError("Trackpad requires a PhoneMic access token")
+    if not isinstance(command, dict):
+        raise RuntimeError("Invalid mouse command")
+    action = command.get("action")
+    if action == "move":
+        dx, dy = command.get("dx"), command.get("dy")
+        if any(type(v) is not int or abs(v) > 500 for v in (dx, dy)):
+            raise RuntimeError("Invalid mouse movement")
+        args = ["mousemove_relative", "--", str(dx), str(dy)]
+    elif action == "click" and command.get("button") in ("left", "right"):
+        args = ["click", "1" if command["button"] == "left" else "3"]
+    else:
+        raise RuntimeError("Invalid mouse command")
+    if os.environ.get("XDG_SESSION_TYPE") == "wayland" or not os.environ.get("DISPLAY"):
+        raise RuntimeError("Trackpad needs an X11 desktop session")
+    try:
+        proc = await asyncio.create_subprocess_exec("xdotool", *args,
+                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+    except FileNotFoundError:
+        raise RuntimeError("Install xdotool on the laptop to use the trackpad") from None
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=2)
+    finally:
+        if proc.returncode is None:
+            proc.kill()
+            await proc.wait()
+    if proc.returncode:
+        raise RuntimeError("Cannot control the laptop pointer; check its X11 session")
+
+
 async def handler(ws):
     peer = ws.remote_address[0] if ws.remote_address else "?"
     # Small frames arrive continuously; Nagle would batch them into extra delay.
@@ -1210,6 +1644,14 @@ async def handler(ws):
                 except Exception:
                     continue
                 if not isinstance(cfg, dict):
+                    continue
+                if "mouse" in cfg:
+                    try:
+                        await mouse_control(cfg["mouse"])
+                        await ws.send(json.dumps({"type": "mouse"}))
+                    except Exception as error:
+                        message = str(error) if isinstance(error, RuntimeError) else "Laptop mouse unavailable"
+                        await ws.send(json.dumps({"type": "mouse", "error": message}))
                     continue
                 if "herdr" in cfg:
                     try:
