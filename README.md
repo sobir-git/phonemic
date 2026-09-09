@@ -16,7 +16,9 @@ The receiver and installer target **Linux with PipeWire**, used on Ubuntu 24.04
 with Android phones. Windows and macOS need an audio/backend and service port;
 they are not supported out of the box. iPhone browser behavior is untested.
 
-The trackpad currently requires X11 and `xdotool`. Browser notifications and
+The trackpad and **Apps** window picker require X11 and `xdotool`.
+App thumbnails also need `python-xlib` and Pillow, available on Ubuntu as
+`python3-xlib` and `python3-pil`. Browser notifications and
 haptics depend on browser support; background operation is not guaranteed.
 
 ## Companion projects
@@ -29,6 +31,7 @@ PhoneMic's default companions are:
   and the remote controls in the phone UI.
 
 Both are optional for microphone streaming and can be replaced or adapted.
+Laptop dictation works with the focused desktop app, independently of Herdr.
 An adapter could trigger [Windows Voice Typing](https://support.microsoft.com/en-US/accessibility/windows/use-voice-typing-to-talk-instead-of-type-on-your-pc)
 or [macOS Dictation](https://support.apple.com/guide/mac-help/mh40584/mac)
 instead of Voice Dictation. PhoneMic does not implement those
@@ -81,6 +84,19 @@ Pick a Herdr pane, then use the keys or collapsible command/message panels.
 Commands type text; Enter is separate. **+** adds a command; holding one deletes
 it after confirmation. Live output shows the current terminal screen, not a
 conversation archive. Settings, commands, and drafts persist in the browser.
+
+The **Apps** button opens a two-column window grid. Tap a card to focus its
+window; the modal stays open until you close it. Small previews refresh every
+three seconds while visible. Minimized windows or unsupported compositors may
+show names only. Previews travel over the paired connection and are not saved
+to disk. Controls follow the focused window. Other apps receive desktop keys,
+scrolling and typed text; they never send input to a Herdr pane. In the Apps
+modal, select any window. A small launcher installed around a user-local
+`herdr` registers its terminal automatically when you run it; the original
+binary is preserved under `~/.local/share/phonemic/herdr-bin/herdr`.
+Detection checks the process and foreground terminal job, and returns to
+generic controls when Herdr exits. No manual window link is needed.
+Wayland app switching is not implemented.
 
 ## Development
 

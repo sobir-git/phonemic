@@ -38,6 +38,16 @@ Unpaired requests receive the pairing page, and control connections are denied.
 - nothing at all — the phone never reached the computer.
 - `rate -> 24000 Hz` — the phone selected a different quality.
 
+## Phone diagnostics
+
+`journalctl --user -u phonemic-web -f` includes `phone-debug` events: recording
+stages, dictation request timing, connection close codes, audio buffer sizes,
+and JavaScript error types with source line numbers. The phone retains up to
+60 unsent events in tab storage and retries delivery after connection failures.
+Events use a separate authenticated HTTP request, so a stalled WebSocket does
+not hide the cause. Audio, typed text, commands, credentials, URLs, and window
+titles are excluded. Logs stay in the local systemd journal.
+
 ## Direct Wi-Fi HTTPS connection
 
 Settings offers `Use Wi-Fi connection`, which opens

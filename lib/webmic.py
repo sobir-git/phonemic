@@ -202,7 +202,7 @@ background:var(--mute);margin-right:.45rem;vertical-align:middle}
 background:var(--surface);border-top:3px solid var(--agent);padding:.7rem;margin-bottom:.4rem}
 .remote-head{display:flex;align-items:center;justify-content:space-between;
   gap:.5rem;padding-right:44px;margin-bottom:.5rem}
-.remote-head label{font-size:.8rem;color:var(--fg);font-weight:650;letter-spacing:.02em}
+.remote-head label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem;color:var(--fg);font-weight:650;letter-spacing:.02em}
 #remote #panes{width:100%;min-height:64px;display:flex;align-items:center;gap:.8rem;
   padding:.7rem .8rem;text-align:left;background:var(--bg);border:1px solid var(--agent);border-radius:12px}
 .context-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:.2rem}
@@ -276,6 +276,7 @@ color:var(--fg);border-radius:10px;font:600 .82rem system-ui;touch-action:manipu
 .output-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
   padding:.4rem .6rem;border-bottom:1px solid var(--line);background:var(--bg)}
 .output-toolbar h2{margin:0;font-size:.76rem;font-weight:650;color:var(--term)}
+#remote #open-apps{flex:0 0 40px;width:40px;padding:0;display:flex;align-items:center;justify-content:center}
 .output-actions{display:flex;align-items:center;gap:.3rem}
 #output-viewer button{display:flex;align-items:center;justify-content:center;gap:.3rem;min-height:32px;
   padding:.3rem .5rem;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--dim);font:600 .72rem system-ui}
@@ -316,6 +317,21 @@ color:var(--fg);border-radius:10px;font:600 .82rem system-ui;touch-action:manipu
 #output-dialog #output-scroll{flex:1;height:auto;min-height:0}
 #output-dialog::backdrop{background:#000000EE}
 
+#apps-dialog{box-sizing:border-box;width:min(94vw,480px);max-height:85dvh;background:var(--bg);color:var(--fg);border:1px solid var(--edge);border-radius:18px;padding:16px}
+#apps-dialog::backdrop{background:#000c}
+.apps-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.apps-head h2{font-size:1.05rem;margin:0}
+#apps-close{padding:10px 14px;background:var(--bg);color:var(--fg);border:1px solid var(--edge);border-radius:10px}
+#apps-status{font-size:.78rem;color:var(--dim);margin:12px 0}
+#apps-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.app-card{min-width:0;text-align:left;background:var(--bg);color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:8px;touch-action:manipulation}
+.app-card[aria-pressed=true]{border-color:var(--voice)}
+.app-card:active{background:var(--raise)}
+.app-card:focus-visible{outline:2px solid var(--agent)}
+.app-preview{width:100%;aspect-ratio:16/10;object-fit:contain;background:var(--bg);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:.75rem}
+.app-name,.app-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-name{font-weight:650;font-size:.85rem;margin-top:8px}
+.app-title{font-size:.72rem;color:var(--dim);margin-top:3px}
 /* trackpad — violet is its hue */
 #trackpad-panel{margin-top:.7rem;padding:.9rem 0;border:1px solid var(--line);
   border-left:3px solid var(--pad);border-radius:14px;background:var(--well);color:var(--fg)}
@@ -359,7 +375,7 @@ box-shadow:0 0 0 5px #19F0A62E;transform:translateY(1px)}
 }
 </style></head><body>
 
-<svg aria-hidden=true focusable=false style="position:absolute;width:0;height:0;overflow:hidden"><defs><symbol id="icon-up" viewBox="0 0 24 24"><path d="M6 11l6-6 6 6M12 5v14"/></symbol><symbol id="icon-down" viewBox="0 0 24 24"><path d="m6 13 6 6 6-6M12 5v14"/></symbol><symbol id="icon-left" viewBox="0 0 24 24"><path d="m11 6-6 6 6 6M5 12h14"/></symbol><symbol id="icon-right" viewBox="0 0 24 24"><path d="m13 6 6 6-6 6M5 12h14"/></symbol><symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol><symbol id="icon-chevron-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol><symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol><symbol id="icon-backspace" viewBox="0 0 24 24"><path d="M9 5h11v14H9l-7-7 7-7Z"/><path d="m11 9 6 6m-6 0 6-6"/></symbol><symbol id="icon-enter" viewBox="0 0 24 24"><path d="M20 5v7a3 3 0 0 1-3 3H4m5-5-5 5 5 5"/></symbol><symbol id="icon-bottom" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></symbol><symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 7h7m6 0h3M4 17h3m6 0h7"/><circle cx="14" cy="7" r="3"/><circle cx="10" cy="17" r="3"/></symbol><symbol id="icon-expand" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/></symbol><symbol id="icon-collapse" viewBox="0 0 24 24"><path d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"/></symbol></defs></svg>
+<svg aria-hidden=true focusable=false style="position:absolute;width:0;height:0;overflow:hidden"><defs><symbol id="icon-apps" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol><symbol id="icon-up" viewBox="0 0 24 24"><path d="M6 11l6-6 6 6M12 5v14"/></symbol><symbol id="icon-down" viewBox="0 0 24 24"><path d="m6 13 6 6 6-6M12 5v14"/></symbol><symbol id="icon-left" viewBox="0 0 24 24"><path d="m11 6-6 6 6 6M5 12h14"/></symbol><symbol id="icon-right" viewBox="0 0 24 24"><path d="m13 6 6 6-6 6M5 12h14"/></symbol><symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol><symbol id="icon-chevron-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol><symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol><symbol id="icon-backspace" viewBox="0 0 24 24"><path d="M9 5h11v14H9l-7-7 7-7Z"/><path d="m11 9 6 6m-6 0 6-6"/></symbol><symbol id="icon-enter" viewBox="0 0 24 24"><path d="M20 5v7a3 3 0 0 1-3 3H4m5-5-5 5 5 5"/></symbol><symbol id="icon-bottom" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></symbol><symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 7h7m6 0h3M4 17h3m6 0h7"/><circle cx="14" cy="7" r="3"/><circle cx="10" cy="17" r="3"/></symbol><symbol id="icon-expand" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/></symbol><symbol id="icon-collapse" viewBox="0 0 24 24"><path d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"/></symbol></defs></svg>
 <button id=gear aria-label=Settings><svg class=icon aria-hidden=true focusable=false><use href="#icon-settings"/></svg></button>
 
 <div id=panel hidden>
@@ -389,8 +405,8 @@ box-shadow:0 0 0 5px #19F0A62E;transform:translateY(1px)}
 </div>
 
 <main>
-  <section id=remote aria-label="Herdr remote control">
-    <div class=remote-head><label for=panes>Herdr</label><div class=output-actions><button id=toggle-output aria-expanded=false aria-controls=output-home>Show output</button><button id=refresh-panes>Refresh</button></div></div>
+  <section id=remote aria-label="Desktop remote control">
+    <div class=remote-head><label id=active-app-label for=panes>Connecting to desktop…</label><div class=output-actions><button id=toggle-output aria-expanded=false aria-controls=output-home>Show output</button><button id=open-apps aria-label="Applications" title="Applications" aria-haspopup=dialog aria-controls=apps-dialog><svg class=icon aria-hidden=true focusable=false><use href="#icon-apps"/></svg></button><button id=refresh-panes>Refresh</button></div></div>
     <button id=panes value="" aria-label="Switch workspace or agent" aria-haspopup=dialog aria-controls=pane-picker>
       <span id=picked-dot class=agent-dot aria-hidden=true></span>
       <span class=context-copy><span id=picked-name class=context-name>Choose an agent</span>
@@ -466,6 +482,10 @@ box-shadow:0 0 0 5px #19F0A62E;transform:translateY(1px)}
 <footer><button id=talk>Touch to talk</button></footer>
 
 
+<dialog id=apps-dialog aria-labelledby=apps-heading>
+<div class=apps-head><h2 id=apps-heading>Applications</h2><button id=apps-close aria-label="Close applications">Close</button></div>
+<p id=apps-status role=status>Loading windows…</p><div id=apps-grid></div>
+</dialog>
 <dialog id=output-dialog aria-label="Expanded terminal output"></dialog>
 <dialog id=workspace-dialog aria-labelledby=workspace-heading>
   <h2 id=workspace-heading>New space</h2>
@@ -512,6 +532,33 @@ const outputViewer=$('output-viewer'),outputScroll=$('output-scroll'),terminalOu
 const outputDialog=$('output-dialog'),followOutput=$('follow-output');
 let outputPane='',outputText=null,outputBusy=false,outputFollow=true,outputGeneration=0;
 let herdrPending=new Map(),herdrSerial=0,remoteBusy=false,modifiers=new Set(),connectionPromise=null;
+
+// Bounded metadata only. Never record text, commands, audio, URLs, or credentials.
+let debugQueue=[],debugTimer=null,debugSending=false,debugSeq=0,debugRx=0;
+const debugClient=Math.random().toString(36).slice(2,10);
+try{const saved=JSON.parse(sessionStorage.getItem('pm.debug.events')||'[]');if(Array.isArray(saved))debugQueue=saved.slice(-60);}catch{}
+function saveDebug(){try{sessionStorage.setItem('pm.debug.events',JSON.stringify(debugQueue));}catch{}}
+function debugError(error){return {error:error?.name||'Error'};}
+function diagnostic(event,extra={}){
+ if(typeof fetch==='undefined')return;
+ const entry={event,client:debugClient,seq:++debugSeq,time_ms:Date.now(),...extra};
+ try{Object.assign(entry,{ready,starting,talking,capturing,hidden:!!document.hidden,online:navigator.onLine!==false,
+  dictation:dictation.checked,socket:ws?.readyState??3,queued_samples:pendN,buffered_bytes:ws?.bufferedAmount||0,
+  sent_bytes:sent,received_bytes:debugRx,audio_state:ctx?.state||'none',app_mode:activeDesktop?.herdr?'herdr':activeDesktop?.id?'generic':'none'});}catch{}
+ debugQueue.push(entry);debugQueue=debugQueue.slice(-60);saveDebug();
+ if(!debugTimer)debugTimer=setTimeout(flushDebug,250);
+}
+async function flushDebug(){
+ debugTimer=null;if(debugSending||!debugQueue.length||typeof fetch==='undefined')return;
+ debugSending=true;const batch=debugQueue.slice(0,8);
+ try{
+  const response=await fetch('/diagnostics',{headers:{'X-PhoneMic-Diagnostics':JSON.stringify(batch)},cache:'no-store',keepalive:true});
+  if(response.ok){const sentEntries=new Set(batch);debugQueue=debugQueue.filter(e=>!sentEntries.has(e));saveDebug();}
+ }catch{}finally{debugSending=false;if(debugQueue.length&&!debugTimer)debugTimer=setTimeout(flushDebug,3000);}
+}
+globalThis.addEventListener?.('error',e=>diagnostic('javascript-error',{...debugError(e.error),line:e.lineno||0,column:e.colno||0}));
+globalThis.addEventListener?.('unhandledrejection',e=>diagnostic('unhandled-rejection',debugError(e.reason)));
+setInterval(()=>{if(starting||capturing||talking)diagnostic('recording-progress');},5000);
 
 try{ const v=localStorage.getItem('pm.q'); if(v) q.value=v; }catch(e){}
 try{ hf.checked = localStorage.getItem('pm.hf')==='1'; }catch(e){}
@@ -573,7 +620,7 @@ function push(peak,sending){
   accPeak=0; accSent=false; accT=now;
 }
 function confirmRx(rx){
-  if(typeof rx!=='number') return;
+  if(typeof rx!=='number') return;debugRx=rx;
   for(const h of hist) if(h.s===1 && h.at<=rx) h.s=2;
 }
 function draw(){
@@ -642,12 +689,14 @@ async function connectSocket(){
   if(connecting) return false;
   if(ready){ const oldSocket=ws; ws=null; ready=false;
     try{oldSocket&&oldSocket.close()}catch(_){} }
-  connecting=true; talk.classList.add('busy'); say('Connecting…');
+  connecting=true;diagnostic('connection-opening');talk.classList.add('busy');say('Connecting…');
   const Q=quality();
   ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
   const socket=ws;
   ws.binaryType='arraybuffer';
   ws.onmessage=e=>{ if(ws!==socket) return; lastMessageAt=Date.now(); try{ const m=JSON.parse(e.data);
+    if(m.type==='desktop-context'){applyDesktopContext(m.result);return;}
+    if(m.type==='desktop'){diagnostic(m.error?'desktop-error':'desktop-ready',{request_id:m.id||0});const p=desktopPending.get(m.id);if(p){desktopPending.delete(m.id);clearTimeout(p.timer);m.error?p.reject(Error(m.error)):p.resolve(m.result);}return;}
     if(m.type==='mouse'){
       if(mousePending){const pending=mousePending;mousePending=null;m.error?pending.reject(new Error(m.error)):pending.resolve();}
       return;
@@ -659,14 +708,15 @@ async function connectSocket(){
       return;
     }
     if(m.type==='dictation'){
-      if(dictationWait){ const pending=dictationWait; dictationWait=null;
-        m.error?pending.reject(new Error(m.error)):pending.resolve(m); }
+      if(dictationWait){ const pending=dictationWait;
+        if(m.id!==pending.id)return;
+        dictationWait=null;diagnostic(m.error?'dictation-error':'dictation-ready',{action:m.action||'unknown',request_id:m.id||0});m.error?pending.reject(new Error(m.error)):pending.resolve(m); }
       return;
     }
     renderLaptop(m); confirmRx(m.rx);
   }catch(_){} };
-  ws.onclose=(event={})=>{if(ws===socket){teardown('Connection lost — reconnecting…','warn');checkBrowserAccess();}};
-  ws.onerror=()=>{ if(ws===socket) say('Connection error','warn'); };
+  ws.onclose=(event={})=>{if(ws===socket){diagnostic('connection-closed',{code:event.code||0});teardown('Connection lost — reconnecting…','warn');checkBrowserAccess();}};
+  ws.onerror=()=>{ if(ws===socket)diagnostic('connection-error');if(ws===socket) say('Connection error','warn'); };
   try{ await new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>{socket.close();reject(new Error('Connection timed out'))},10000);
     socket.onopen=()=>{clearTimeout(timer);resolve()};
@@ -677,7 +727,7 @@ async function connectSocket(){
   ws.send(JSON.stringify({rate:ctx?ctx.sampleRate:Q.rate,proc:Q.proc}));
   ready=true; reconnectDelay=1000;lastMessageAt=Date.now();connecting=false; talk.classList.remove('busy');
   if(!starting&&!capturing&&!talking) say('Ready — touch to record');
-  paint(); return true;
+  diagnostic('connection-ready');flushDebug();paint();return true;
 }
 async function prepareAudio(){
   if(node&&ctx) return;
@@ -708,14 +758,17 @@ function flushAudio(){
   if(!pendN||!ws||ws.readyState!==1) return;
   const out=new Int16Array(pendN); let offset=0;
   for(const a of pend){out.set(a,offset);offset+=a.length;}
-  pend=[]; pendN=0; sent+=out.byteLength; ws.send(out.buffer);
+  pend=[]; pendN=0; sent+=out.byteLength;
+  for(let i=0;i<out.length;i+=32000)ws.send(out.slice(i,i+32000).buffer);
 }
 function captureChunk(data){
   if(!capturing) return;
   push(data.p,talking);
   pend.push(new Int16Array(data.b)); pendN+=data.b.byteLength/2;
-  if(!talking&&pendN>ctx.sampleRate*4){
-    teardown('Connection too slow — please try again','warn'); return;
+  if(!talking&&pendN>ctx.sampleRate*12){
+    diagnostic('startup-buffer-full');micOff();
+    if(dictationWait){const pending=dictationWait;dictationWait=null;pending.reject(Error('Laptop dictation took too long to start. Try again.'));}
+    say('Laptop dictation took too long to start. Try again.','warn');return;
   }
   if(talking&&pendN>=CHUNK) flushAudio();
 }
@@ -735,8 +788,8 @@ async function micOn(){
   }
   stream=acquired;
   src=ctx.createMediaStreamSource(stream); src.connect(node);
-  capturing=true;
-  await ctx.resume();
+  capturing=true;diagnostic('microphone-acquired');
+  await ctx.resume();diagnostic('audio-running');
   paint(); say('Recording','live');
   return true;
 }
@@ -749,7 +802,7 @@ function micOff(keepAudio=false){
 }
 async function begin(){
   if(talking||starting||(remoteBusy&&remoteBusy!=='list')) return;
-  starting=true; paint();
+  starting=true;diagnostic('recording-request');paint();
   let remoteStarted=false;
   try{
     say('Opening microphone…');
@@ -770,25 +823,32 @@ async function begin(){
       say('Ready — the mic is off');
       return;
     }
-    talking=true; flushAudio();
+    talking=true;flushAudio();diagnostic('recording-streaming');
     say(dictation.checked?'Dictating to laptop':'Live','live');
     if(!pressed){starting=false;end();}
   }catch(e){
-    micOff();
+    diagnostic('recording-error',debugError(e));micOff();
     if(remoteStarted) await dictationCommand('abort').catch(()=>{});
     say(e.message||'Could not start recording','warn');
   }finally{ starting=Boolean(dictationWait); paint(); }
 }
+let dictationSerial=0;
 function dictationCommand(action){
   return new Promise((resolve,reject)=>{
     if(!ws||ws.readyState!==1){ reject(new Error('Computer disconnected')); return; }
     if(dictationWait){ reject(new Error('Dictation command already pending')); return; }
-    const timer=setTimeout(()=>{ dictationWait=null; reject(new Error('Dictation timed out')); ws.close(); },7000);
-    dictationWait={resolve:m=>{clearTimeout(timer);resolve(m)},reject:e=>{clearTimeout(timer);reject(e)}};
-    ws.send(JSON.stringify({dictation:action,pane:paneSelect.value||undefined}));
+    const id=++dictationSerial,socket=ws;diagnostic('dictation-request',{action,request_id:id});
+    const timer=setTimeout(()=>{
+      if(dictationWait?.id!==id)return;dictationWait=null;diagnostic('dictation-timeout',{action,request_id:id});
+      if(socket.readyState===1)socket.send(JSON.stringify({dictation:'abort',id:++dictationSerial}));
+      reject(new Error('Laptop dictation timed out. The desktop is still connected.'));
+    },action==='stop'?30000:10000);
+    dictationWait={id,resolve:m=>{clearTimeout(timer);resolve(m)},reject:e=>{clearTimeout(timer);reject(e)}};
+    ws.send(JSON.stringify({id,dictation:action}));
   });
 }
 function end(){
+  diagnostic('recording-release');
   if(starting){ micOff(true); paint(); return; }
   if(!talking) return;
   flushAudio();
@@ -800,6 +860,7 @@ function end(){
   }
 }
 function teardown(msg,c){
+  diagnostic('connection-teardown');flushDebug();
   resetTrackpad();
   if(mousePending){mousePending.reject(new Error('Computer disconnected'));mousePending=null;}
   pressed=false; ready=false; connecting=false; talking=false; micOff();
@@ -807,6 +868,8 @@ function teardown(msg,c){
   if(dictationWait){ dictationWait.reject(new Error("Computer disconnected")); dictationWait=null; }
   for(const pending of herdrPending.values()) pending.reject(new Error('Computer disconnected'));
   herdrPending.clear();
+  for(const pending of desktopPending.values()){clearTimeout(pending.timer);pending.reject(new Error('Computer disconnected'));}
+  desktopPending.clear();
   const oldSocket=ws; ws=null;
   try{oldSocket&&oldSocket.close()}catch(e){} try{ctx&&ctx.close()}catch(e){}
   ctx=null; node=null;
@@ -820,7 +883,7 @@ function resetTrackpad(){mousePointer=null;mouseDX=mouseDY=0;mouseClicks=[];}
 function mouseCommand(command){
   return new Promise((resolve,reject)=>{
     if(!ready||!ws||ws.readyState!==1){reject(new Error('Disconnected. Close and reopen the trackpad.'));return;}
-    const timer=setTimeout(()=>{mousePending=null;reject(new Error('Trackpad timed out. Reopen to reconnect.'));ws&&ws.close();},3000);
+    const timer=setTimeout(()=>{mousePending=null;reject(new Error('Trackpad response delayed. Try again.'));},10000);
     mousePending={resolve:()=>{clearTimeout(timer);resolve()},reject:e=>{clearTimeout(timer);reject(e)}};
     ws.send(JSON.stringify({mouse:command}));
   });
@@ -878,10 +941,10 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)resetTrackp
 function paintRemote(){
   const busy=starting||talking||capturing||remoteBusy;
   paneSelect.disabled=refreshPanes.disabled=busy;
-  $('insert-text').disabled=busy||!paneSelect.value;
+  $('insert-text').disabled=busy||!activeDesktop?.id||(activeDesktop.herdr&&!paneSelect.value);
   $('new-workspace').disabled=$('save-workspace').disabled=busy;
   for(const button of [...remoteButtons,...document.querySelectorAll('#command-buttons button')]){
-    button.disabled=busy||!paneSelect.value;
+    button.disabled=busy||!activeDesktop?.id||(activeDesktop.herdr&&!paneSelect.value);
     if(button.dataset.mod) button.setAttribute('aria-pressed',String(modifiers.has(button.dataset.mod)));
   }
 }
@@ -891,14 +954,15 @@ async function herdrCommand(command){
     const id=++herdrSerial;
     const timer=setTimeout(()=>{herdrPending.delete(id);reject(new Error('Herdr did not respond'))},5000);
     herdrPending.set(id,{resolve:v=>{clearTimeout(timer);resolve(v)},reject:e=>{clearTimeout(timer);reject(e)}});
-    ws.send(JSON.stringify({id,herdr:command}));
+    ws.send(JSON.stringify({id,herdr:command,window:activeDesktop?.id}));
   });
 }
 async function remoteAction(command){
   if(remoteBusy||starting||talking||capturing) return;
-  remoteBusy=command.action;paintRemote();
+  remoteBusy=command.action;diagnostic('control-request',{action:command.action});paintRemote();
   try{
-    const result=await herdrCommand(command);
+    const common=['key','scroll','text','command'].includes(command.action);
+    const result=common?await desktopCommand({action:'input',command,window:activeDesktop?.id,herdr:!!activeDesktop?.herdr}):await herdrCommand(command);
     if(command.action==='list'){
       applyHerdrInventory(result);
       remoteStatus.textContent=result.panes.length?'':'No panes open in Herdr';
@@ -911,7 +975,7 @@ async function remoteAction(command){
     return result;
   }catch(error){
     if(command.action==='focus'){renderPicked();$('picker-summary').textContent=error.message;}
-    remoteStatus.textContent=error.message;
+    diagnostic('control-error',debugError(error));remoteStatus.textContent=error.message;
   }finally{remoteBusy=false;paintRemote();if(command.action==='focus'||command.action==='scroll'||command.action==='key') refreshOutput(true);if(queuedPane){const id=queuedPane;queuedPane=null;choosePane(id)}}
 }
 refreshPanes.onclick=()=>remoteAction({action:'list'});
@@ -932,6 +996,61 @@ document.addEventListener('pointerdown',e=>{
   const button=e.target.closest?.('button,summary');
   if(button&&!button.disabled&&button!==talk&&e.isPrimary!==false)haptic();
 },{passive:true});
+
+const appsDialog=$('apps-dialog'),appsGrid=$('apps-grid'),appsStatus=$('apps-status');
+let activeDesktop=null;
+const desktopPending=new Map();let desktopSerial=0,appsTimer=null,appsBusy=false,appFocusBusy=false;
+function applyDesktopContext(context){
+ const changed=activeDesktop?.id!==context?.id||activeDesktop?.herdr!==context?.herdr;
+ activeDesktop=context;
+ if(changed){modifiers.clear();resetTrackpad();}
+ const isHerdr=!!context?.herdr;
+ $('active-app-label').textContent=isHerdr?'Herdr':context?.app||'No focused window';
+ paneSelect.hidden=refreshPanes.hidden=$('toggle-output').hidden=$('commands-tab').hidden=!isHerdr;
+ if(!isHerdr){$('command-panel').hidden=true;$('commands-tab').setAttribute('aria-expanded','false');$('output-home').hidden=true;if(outputDialog.open)outputDialog.close();if(picker.open)picker.close();}
+ $('insert-text').textContent=isHerdr?'Type into pane':'Type into app';
+ paintRemote();
+}
+async function desktopCommand(command){
+ diagnostic('desktop-request',{action:command.action==='input'?command.command?.action:command.action});
+ await connect();if(!ready||!ws||ws.readyState!==1)throw Error('Computer is disconnected.');
+ const id=++desktopSerial;
+ return new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>{desktopPending.delete(id);reject(Error('Desktop request timed out.'));},10000);
+  desktopPending.set(id,{resolve,reject,timer});ws.send(JSON.stringify({desktop:command,id}));
+ });
+}
+async function updateApps(){
+ clearTimeout(appsTimer);
+ if(!appsDialog.open||document.hidden||appsBusy||appFocusBusy)return;
+ appsBusy=true;
+ try{
+  const result=await desktopCommand({action:'list'});
+  if(!appsDialog.open)return;
+  const retainedFocus=document.activeElement?.dataset?.window;
+  appsGrid.replaceChildren();
+  for(const w of result.windows){
+   const card=document.createElement('button');card.className='app-card';card.dataset.window=w.id;
+   card.setAttribute('aria-pressed',String(w.active));card.setAttribute('aria-label',w.app+': '+w.title);
+   const preview=document.createElement(w.preview?'img':'span');preview.className='app-preview';
+   if(w.preview){preview.src='data:image/jpeg;base64,'+w.preview;preview.alt='';}else preview.textContent='Preview unavailable';
+   const name=document.createElement('span');name.className='app-name';name.textContent=w.app;
+   const title=document.createElement('span');title.className='app-title';title.textContent=w.title;
+   card.append(preview,name,title);card.onclick=async()=>{
+    if(appFocusBusy)return;appFocusBusy=true;clearTimeout(appsTimer);appsStatus.textContent='Switching…';
+    try{const selected=await desktopCommand({action:'focus',window:w.id});if(selected.context)applyDesktopContext(selected.context);appsStatus.textContent='Window focused.';for(const button of appsGrid.children)button.setAttribute('aria-pressed',String(button.dataset.window===w.id));}
+    catch(e){appsStatus.textContent=e.message;}
+    finally{appFocusBusy=false;if(appsDialog.open)appsTimer=setTimeout(updateApps,3000);}
+   };appsGrid.append(card);if(retainedFocus===w.id)card.focus();
+  }
+  appsStatus.textContent=result.windows.length?'Tap a window to switch. Previews refresh every 3 seconds.':'No application windows found.';
+ }catch(e){if(appsDialog.open)appsStatus.textContent=e.message;}
+ finally{appsBusy=false;if(appsDialog.open&&!document.hidden)appsTimer=setTimeout(updateApps,3000);}
+}
+$('open-apps').onclick=()=>{appsDialog.showModal();updateApps();};
+$('apps-close').onclick=()=>appsDialog.close();
+appsDialog.addEventListener('close',()=>{clearTimeout(appsTimer);appsGrid.replaceChildren();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)clearTimeout(appsTimer);else if(appsDialog.open)updateApps();});
 
 const defaultCommands=['/clear','/model','cx','cc-yolo'];
 let savedCommands=[...defaultCommands];
@@ -1248,7 +1367,7 @@ picker.addEventListener('click',e=>{if(e.target===picker) picker.close()});
 $('view-spaces').onclick=()=>{pickerView='spaces';workspaceFilter=null;renderPicker()};
 $('view-agents').onclick=()=>{pickerView='agents';workspaceFilter=null;renderPicker()};
 setInterval(()=>{
-  if(document.hidden||remoteBusy||starting||talking||capturing||!ready) return;
+  if(!activeDesktop?.herdr||document.hidden||remoteBusy||starting||talking||capturing||!ready) return;
   herdrCommand({action:'list'}).then(result=>{
     if(remoteBusy||starting||talking||capturing) return;
     applyHerdrInventory(result);paintRemote();
@@ -1267,8 +1386,9 @@ for(const button of remoteButtons){
     remoteAction({action:'key',pane:paneSelect.value,key:button.dataset.key,modifiers:mods});
   };
 }
-// Loading the picker connects the laptop without opening the phone microphone.
-remoteAction({action:'list'});
+// Desktop controls connect independently of Herdr and the microphone.
+diagnostic('page-loaded');
+connect().catch(()=>{}); // Initial desktop connection
 
 talk.addEventListener('pointerdown',e=>{ e.preventDefault();
   if(starting||(remoteBusy&&remoteBusy!=='list')) return;
@@ -1300,7 +1420,7 @@ const _b=begin, _e=end;
 begin=async()=>{ await _b(); if(talking) wake(true); };
 end=()=>{ _e(); wake(false); };
 document.addEventListener('visibilitychange',()=>{
-  if(document.hidden){clearTimeout(reconnectTimer);reconnectTimer=null;if(talking)say('Backgrounded — Android may cut the audio','warn');}
+  diagnostic('visibility');if(document.hidden){flushDebug();clearTimeout(reconnectTimer);reconnectTimer=null;if(talking)say('Backgrounded — Android may cut the audio','warn');}
   else resumeConnection();
 });
 globalThis.addEventListener?.('pageshow',resumeConnection);
@@ -1389,7 +1509,7 @@ def secure_response(response):
     hashes = ' '.join("'sha256-" + base64.b64encode(hashlib.sha256(code.encode()).digest()).decode() + "'" for code in scripts)
     response.headers['Content-Security-Policy'] = (
         "default-src 'none'; script-src " + ((hashes + ' blob:') if hashes else "'none'") +
-        "; style-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; "
+        "; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
         "worker-src 'self' blob:; media-src 'self' blob:; manifest-src 'self'; "
         "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
     return response
@@ -1421,7 +1541,7 @@ def route_request(conn, request):
         return reply(403, 'Unrecognized origin')
     path = urlsplit(request.path)
     base = path.path
-    if request.headers.get('Sec-Fetch-Site') == 'cross-site' and (base == '/ws' or base.startswith('/auth/')):
+    if request.headers.get('Sec-Fetch-Site') == 'cross-site' and (base in ('/ws','/diagnostics') or base.startswith('/auth/')):
         return reply(403, 'Cross-site request denied')
     if path.query:
         return reply(303, headers={'Location':'/'}) if base == '/' else reply(400, 'Query credentials are not supported')
@@ -1452,6 +1572,8 @@ def route_request(conn, request):
         return reply(200, PAGE.replace('__CONNECTION_CONFIG__',config), 'text/html; charset=utf-8')
     if not authenticated:
         return reply(401, 'Pair this browser on the computer')
+    if base == '/diagnostics':
+        return receive_diagnostics(request)
     if base == '/auth/status':
         return reply(200)
     if base == '/auth/handoff':
@@ -1485,6 +1607,31 @@ class Budget:
 PAIR_REQUEST_BUDGET = Budget(0.5, 10)
 
 
+DEBUG_BUDGET = Budget(10,40)
+DEBUG_EVENTS = set('page-loaded javascript-error unhandled-rejection connection-opening connection-ready connection-closed connection-error connection-teardown microphone-acquired audio-running recording-request recording-streaming recording-progress recording-release recording-error startup-buffer-full dictation-request dictation-ready dictation-error dictation-timeout visibility desktop-request desktop-ready desktop-error control-request control-error'.split())
+
+def receive_diagnostics(request):
+    raw=request.headers.get('X-PhoneMic-Diagnostics','')
+    if not raw or len(raw)>12000:return reply(400,'Invalid diagnostics')
+    try:events=json.loads(raw)
+    except ValueError:return reply(400,'Invalid diagnostics')
+    if not isinstance(events,list) or not 1<=len(events)<=8:return reply(400,'Invalid diagnostics')
+    if not DEBUG_BUDGET.take(len(events)):return reply(429,'Retry diagnostics later')
+    numbers={'seq','time_ms','request_id','socket','code','queued_samples','buffered_bytes','sent_bytes','received_bytes','line','column'}
+    flags={'ready','starting','talking','capturing','hidden','online','dictation'}
+    enums={'action':{'start','stop','abort','unknown','key','text','command','focus','list','scroll','split','close','workspace','read'},'audio_state':{'none','running','suspended','closed','interrupted'},
+           'app_mode':{'herdr','generic','none'},'error':{'Error','TypeError','ReferenceError','SyntaxError','RangeError','DOMException','NotAllowedError','NotFoundError','NotReadableError','AbortError','InvalidStateError'}}
+    for entry in events:
+        if not isinstance(entry,dict) or not isinstance(entry.get('event'),str) or entry['event'] not in DEBUG_EVENTS:continue
+        clean={'event':entry['event']}
+        for key,value in entry.items():
+            if key in numbers and type(value) is int and 0<=value<=10**15:clean[key]=value
+            elif key in flags and type(value) is bool:clean[key]=value
+            elif key in enums and isinstance(value,str) and value in enums[key]:clean[key]=value
+            elif key=='client' and isinstance(value,str) and re.fullmatch(r'[a-z0-9]{1,12}',value):clean[key]=value
+        print('phone-debug '+json.dumps(clean,separators=(',',':')),flush=True)
+    return reply(200)
+
 async def guard_session(ws):
     while True:
         await asyncio.sleep(1)
@@ -1511,6 +1658,18 @@ async def report(ws, state):
         except Exception:
             return
         await asyncio.sleep(0.25)
+
+async def report_desktop(ws):
+    while True:
+        try:
+            context = await desktop_context()
+        except Exception:
+            context = {}
+        try:
+            await ws.send(json.dumps({'type':'desktop-context','result':context}))
+        except Exception:
+            return
+        await asyncio.sleep(.8)
 
 async def report_herdr(ws, herdr):
     """Push changed Herdr inventory over the phone socket.
@@ -1552,6 +1711,11 @@ def stop_proc(p):
     except Exception:
         try: p.kill(); p.wait(timeout=2)
         except Exception: pass
+
+def write_audio(process, data):
+    # Pipe backpressure must not block WebSocket heartbeats or desktop controls.
+    process.stdin.write(data)
+    process.stdin.flush()
 
 def spawn_sink(rate):
     """Feed raw PCM straight into the sink.
@@ -1759,6 +1923,127 @@ class Dictation:
         self.reader = self.writer = None
 
 
+CONTEXT_CACHE = None
+CONTEXT_UPDATED = 0.0
+CONTEXT_LOCK = asyncio.Lock()
+
+async def desktop_context(fresh=False):
+    global CONTEXT_CACHE, CONTEXT_UPDATED
+    async with CONTEXT_LOCK:
+        if not fresh and CONTEXT_CACHE is not None and time.monotonic()-CONTEXT_UPDATED < .4:
+            return CONTEXT_CACHE
+        inventory = await desktop_snapshot(previews=False)
+        active = next((w for w in inventory['windows'] if w['active']), None)
+        CONTEXT_CACHE = ({'id':active['id'],'app':active['app'],'herdr':bool(active.get('herdr')),'width':active.get('width',800),'height':active.get('height',600)} if active else {})
+        CONTEXT_UPDATED = time.monotonic()
+        return CONTEXT_CACHE
+
+async def require_desktop(window, herdr=None):
+    current = await desktop_context(fresh=True)
+    if not window or current.get('id') != window or (herdr is not None and current.get('herdr') != herdr):
+        raise RuntimeError('Focused app changed. Check the current app and try again.')
+    return current
+
+async def route_desktop_input(message, herdr):
+    command=message.get('command')
+    if not isinstance(command,dict) or command.get('action') not in ('key','scroll','text','command') or type(message.get('herdr')) is not bool:
+        raise RuntimeError('Invalid input command')
+    current=await require_desktop(message.get('window'),message['herdr'])
+    if current['herdr']:
+        return await herdr.control(command)
+    return await generic_input(command,current['id'])
+
+async def generic_input(command, window):
+    if not isinstance(command,dict):
+        raise RuntimeError('Invalid input')
+    action = command.get('action')
+    data = None
+    if action == 'key':
+        keys = {'esc':'Escape','tab':'Tab','left':'Left','right':'Right','up':'Up','down':'Down','space':'space','backspace':'BackSpace','enter':'Return','c':'c','u':'u'}
+        key, mods = command.get('key'), command.get('modifiers',[])
+        if key not in keys or not isinstance(mods,list) or len(mods)>2 or any(m not in ('ctrl','alt') for m in mods):
+            raise RuntimeError('Invalid key')
+        args = ['key','--clearmodifiers','+'.join(mods+[keys[key]])]
+    elif action in ('text','command'):
+        text = command.get('text')
+        if not isinstance(text,str) or not text.strip() or len(text)>20000 or any((ord(c)<32 and c not in '\n\t') or ord(c)==127 for c in text):
+            raise RuntimeError('Use text without control codes, up to 20000 characters')
+        args = ['type','--clearmodifiers','--delay','0','--file','-'];data=text.encode()
+    elif action == 'scroll':
+        direction=command.get('direction')
+        if direction == 'bottom':
+            args=['key','--clearmodifiers','ctrl+End']
+        elif direction in ('up','down'):
+            # Scroll inside the active window, rather than whichever app is under the pointer.
+            current=await require_desktop(window, False)
+            args=['mousemove','--window',window,str(current['width']//2),str(current['height']//2),'click','--repeat','3','--delay','30','4' if direction=='up' else '5']
+        else:
+            raise RuntimeError('Invalid scroll direction')
+    else:
+        raise RuntimeError('Unsupported desktop input')
+    await require_desktop(window, False)
+    proc = await asyncio.create_subprocess_exec('xdotool',*args,stdin=asyncio.subprocess.PIPE if data is not None else asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL)
+    try:
+        await asyncio.wait_for(proc.communicate(data),timeout=5)
+    finally:
+        if proc.returncode is None:
+            proc.kill();await proc.wait()
+    if proc.returncode:
+        raise RuntimeError('Desktop input failed')
+    return {'window':window}
+
+DESKTOP_LOCK = asyncio.Lock()
+DESKTOP_CACHE = None
+DESKTOP_UPDATED = 0.0
+
+async def desktop_snapshot(previews=True):
+    args = [sys.executable, str(pathlib.Path(__file__).with_name('desktop.py'))]
+    if not previews:
+        args.append('--names')
+    proc = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=6)
+    finally:
+        if proc.returncode is None:
+            proc.kill()
+            await proc.wait()
+    if proc.returncode or len(out) > 3*1024*1024:
+        raise RuntimeError('Desktop windows are unavailable')
+    result = json.loads(out)
+    if result.get('error'):
+        raise RuntimeError(result['error'])
+    return result
+
+async def desktop_control(command):
+    global DESKTOP_CACHE, DESKTOP_UPDATED
+    if not isinstance(command, dict):
+        raise RuntimeError('Invalid desktop command')
+    async with DESKTOP_LOCK:
+        if command.get('action') == 'list':
+            if DESKTOP_CACHE is None or time.monotonic()-DESKTOP_UPDATED >= 2.5:
+                DESKTOP_CACHE = await desktop_snapshot()
+                DESKTOP_UPDATED = time.monotonic()
+            return DESKTOP_CACHE
+        if command.get('action') != 'focus' or not isinstance(command.get('window'), str) or not re.fullmatch(r'[0-9]{1,10}', command['window']):
+            raise RuntimeError('Invalid window selection')
+        inventory = await desktop_snapshot(previews=False)
+        if command['window'] not in {w['id'] for w in inventory['windows']}:
+            raise RuntimeError('That window has closed. Choose another window.')
+        proc = await asyncio.create_subprocess_exec('xdotool','windowactivate','--sync',command['window'],
+            stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL)
+        try:
+            await asyncio.wait_for(proc.wait(),timeout=2)
+        finally:
+            if proc.returncode is None:
+                proc.kill()
+                await proc.wait()
+        if proc.returncode:
+            raise RuntimeError('Could not focus that window')
+        DESKTOP_CACHE = None
+        return {'focused':command['window'],'context':await desktop_context(fresh=True)}
+
+
 async def mouse_control(command):
     """Accept only bounded relative movement and complete clicks on the local X11 desktop."""
     if not isinstance(command, dict):
@@ -1823,8 +2108,12 @@ async def handle_authenticated(ws):
     playback_until = 0.0
     task = asyncio.create_task(report(ws, state))
     herdr_task = asyncio.create_task(report_herdr(ws, herdr))
+    desktop_task = asyncio.create_task(report_desktop(ws))
     guard = asyncio.create_task(guard_session(ws))
-    controls, audio = Budget(40, 80), Budget(192000, 512000)
+    controls, audio = Budget(40, 80), Budget(192000, 2*1024*1024)
+    preview_task = None
+    desktop_budget = Budget(1, 3)
+    pointer_budget = Budget(120, 240)
     t0 = time.time()
     try:
         async for msg in ws:
@@ -1832,7 +2121,7 @@ async def handle_authenticated(ws):
                 if not AUTH.valid(*ws.phonemic_auth):
                     await ws.close(4401, 'Browser access revoked or expired')
                     break
-                if len(msg) > 100000 or not controls.take():
+                if len(msg) > 100000:
                     await ws.close(1008, 'Control message limit exceeded')
                     break
                 # The phone announces its chosen quality before sending audio.
@@ -1842,6 +2131,40 @@ async def handle_authenticated(ws):
                     continue
                 if not isinstance(cfg, dict):
                     continue
+                budget = pointer_budget if 'mouse' in cfg else controls
+                if not budget.take():
+                    kind = 'mouse' if 'mouse' in cfg else 'desktop' if 'desktop' in cfg else 'herdr' if 'herdr' in cfg else 'dictation'
+                    await ws.send(json.dumps({'type':kind,'id':cfg.get('id'),'error':'Input is arriving too quickly. Try again.'}))
+                    continue
+                if "desktop" in cfg:
+                    try:
+                        command = cfg["desktop"]
+                        if isinstance(command,dict) and command.get('action') == 'input':
+                            result = await route_desktop_input(command, herdr)
+                            await ws.send(json.dumps({"type":"desktop","id":cfg.get("id"),"result":result}))
+                            continue
+                        if not desktop_budget.take():
+                            raise RuntimeError("Wait before requesting more previews")
+                        if command.get('action') == 'list':
+                            if preview_task and not preview_task.done():
+                                raise RuntimeError('Window previews are still loading')
+                            async def send_previews(request_id):
+                                try:
+                                    result = await desktop_control({'action':'list'})
+                                    if AUTH.valid(*ws.phonemic_auth):
+                                        await ws.send(json.dumps({'type':'desktop','id':request_id,'result':result}))
+                                except Exception:
+                                    if AUTH.valid(*ws.phonemic_auth):
+                                        await ws.send(json.dumps({'type':'desktop','id':request_id,'error':'Window previews unavailable'}))
+                            preview_task = asyncio.create_task(send_previews(cfg.get('id')))
+                            continue
+                        result = await desktop_control(cfg["desktop"])
+                        if AUTH.valid(*ws.phonemic_auth):
+                            await ws.send(json.dumps({"type":"desktop","id":cfg.get("id"),"result":result}))
+                    except Exception as error:
+                        message = str(error) if isinstance(error,RuntimeError) else "Desktop control unavailable"
+                        await ws.send(json.dumps({"type":"desktop","id":cfg.get("id"),"error":message}))
+                    continue
                 if "mouse" in cfg:
                     try:
                         await mouse_control(cfg["mouse"])
@@ -1850,10 +2173,12 @@ async def handle_authenticated(ws):
                         message = str(error) if isinstance(error, RuntimeError) else "Laptop mouse unavailable"
                         await ws.send(json.dumps({"type": "mouse", "error": message}))
                     continue
-                if "herdr" in cfg:
+                if "herdr" in cfg and "dictation" not in cfg:
                     try:
                         if not isinstance(cfg["herdr"], dict):
                             raise RuntimeError("Invalid terminal command")
+                        if cfg["herdr"].get('action') not in ('list','read'):
+                            await require_desktop(cfg.get('window'), True)
                         result = await herdr.control(cfg["herdr"])
                         await ws.send(json.dumps({"type": "herdr", "id": cfg.get("id"), "result": result}))
                     except Exception as error:
@@ -1863,20 +2188,25 @@ async def handle_authenticated(ws):
                 if "dictation" in cfg:
                     try:
                         action = cfg["dictation"]
+                        started_at = time.monotonic()
+                        print(f"dictation {action if action in ('start','stop','abort') else 'invalid'} requested",flush=True)
                         if action == "start":
-                            if cfg.get("pane"):
-                                await herdr.control({"action": "focus", "pane": cfg["pane"]})
-                            await dictation.start()
+                            async with asyncio.timeout(8):
+                                # Recording uses the already-focused app; it must not wait for
+                                # desktop discovery or move focus to a Herdr pane.
+                                await dictation.start()
                         elif action in ("stop", "abort"):
                             if action == "stop":
                                 await asyncio.sleep(max(0, playback_until-time.monotonic()))
                             await dictation.finish(abort=action == "abort")
                         else:
                             raise RuntimeError("Unknown dictation action")
-                        await ws.send(json.dumps({"type": "dictation", "action": action}))
+                        print(f"dictation {action} ready after {time.monotonic()-started_at:.2f}s",flush=True)
+                        await ws.send(json.dumps({"type": "dictation", "action": action,"id":cfg.get("id")}))
                     except Exception as error:
+                        print(f"dictation request failed ({type(error).__name__})",flush=True)
                         message = str(error) if isinstance(error, RuntimeError) else "Laptop dictation unavailable; check that its updated daemon is running"
-                        await ws.send(json.dumps({"type": "dictation", "error": message}))
+                        await ws.send(json.dumps({"type": "dictation", "error": message,"id":cfg.get("id")}))
                     continue
                 r = cfg.get("rate", rate)
                 if type(r) is not int or not 8000 <= r <= 48000:
@@ -1895,17 +2225,22 @@ async def handle_authenticated(ws):
                 # Unflushed, Python holds ~8 KB before writing -- about 170 ms
                 # of delay at these rates, for nothing.
                 playback_until = max(time.monotonic(), playback_until) + len(msg)/2/rate
-                ff.stdin.write(msg); ff.stdin.flush()
+                await asyncio.to_thread(write_audio, ff, msg)
                 state["n"] += len(msg)
     except Exception as e:
-        print("stream ended", flush=True)
+        print(f"stream ended ({type(e).__name__})", flush=True)
     finally:
         task.cancel()
         herdr_task.cancel()
+        desktop_task.cancel()
+        if preview_task:
+            preview_task.cancel()
+            await asyncio.gather(preview_task,return_exceptions=True)
         guard.cancel()
-        await asyncio.gather(task, herdr_task, guard, return_exceptions=True)
+        await asyncio.gather(task, herdr_task, desktop_task, guard, return_exceptions=True)
         await dictation.close()
         stop_proc(ff)
+        print(f"connection closed (code={ws.close_code if hasattr(ws, 'close_code') else None})", flush=True)
         print(f"phone disconnected after {time.time()-t0:.0f}s "
               f"({state['n']/2/rate:.1f}s of audio)", flush=True)
 

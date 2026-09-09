@@ -30,6 +30,8 @@ systemctl --user show phonemic-web -p ExecStart -p ActiveState
 For the default installation, deploy from the repository root:
 
 ```sh
+install -m 644 lib/herdr_detect.py "$HOME/.local/share/phonemic/lib/herdr_detect.py"
+install -m 644 lib/desktop.py "$HOME/.local/share/phonemic/lib/desktop.py"
 install -m 644 lib/webauth.py "$HOME/.local/share/phonemic/lib/webauth.py"
 install -m 644 lib/webmic.py "$HOME/.local/share/phonemic/lib/webmic.py"
 systemctl --user restart phonemic-web

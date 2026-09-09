@@ -99,7 +99,9 @@ class BufferedAudioTests(unittest.IsolatedAsyncioTestCase):
              patch.object(webmic, 'spawn_sink', return_value=sink), \
              patch.object(webmic, 'stop_proc'), \
              patch.object(webmic, 'report', new=AsyncMock()), \
+             patch.object(webmic, 'report_desktop', new=AsyncMock()), \
              patch.object(webmic, 'report_herdr', new=AsyncMock()), \
+             patch.object(webmic, 'require_desktop', new=AsyncMock(return_value={'id':'123','herdr':False})), \
              patch.object(webmic, 'guard_session', new=AsyncMock()), \
              patch.object(webmic.AUTH, 'valid', return_value=True), \
              patch.object(webmic, 'time', clock), \

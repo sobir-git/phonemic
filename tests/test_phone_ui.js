@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const {execFileSync} = require('node:child_process');
 const vm = require('node:vm');
-const source = execFileSync('python3', ['-c', "import ast,pathlib; tree=ast.parse(pathlib.Path('lib/webmic.py').read_text()); print(next(ast.literal_eval(n.value) for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='PAGE' for t in n.targets)))"], {encoding:'utf8'}).split('<script>')[1].split('</script>')[0].replace("remoteAction({action:'list'});\n\n", '');
+const source = execFileSync('python3', ['-c', "import ast,pathlib; tree=ast.parse(pathlib.Path('lib/webmic.py').read_text()); print(next(ast.literal_eval(n.value) for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='PAGE' for t in n.targets)))"], {encoding:'utf8'}).split('<script>')[1].split('</script>')[0].replace("connect().catch(()=>{}); // Initial desktop connection", '');
 function browser(store = {}) {
   const elements = new Map();
   const context = vm.createContext({
@@ -27,11 +27,28 @@ function browser(store = {}) {
   });
   vm.runInContext(source, context);
   const run = code => vm.runInContext(code, context);
-  run(`var actualMicOn=micOn; ready=true; ws={readyState:1,close(){}}; pressed=true; micOn=async()=>true;
+  run(`activeDesktop={id:'123',app:'Terminal',herdr:true};var actualMicOn=micOn; ready=true; ws={readyState:1,close(){}}; pressed=true; micOn=async()=>true;
     var commands=[]; dictationCommand=async action=>{commands.push(action)};`);
   return run;
 }
 (async () => {
+  {
+    const run=browser();
+    run(`dictation.checked=true;var releaseStart;var packets=[];var socketClosed=false;
+      ws={readyState:1,send:b=>packets.push(new Int16Array(b)),close:()=>{socketClosed=true}};
+      ctx={sampleRate:24000,suspend(){},close(){}};
+      micOn=async()=>{capturing=true;return true};
+      dictationCommand=action=>action==='start'?new Promise(r=>releaseStart=r):Promise.resolve();`);
+    const pending=run('begin()');await new Promise(setImmediate);
+    run('captureChunk({b:new Int16Array(24000*5).buffer,p:.1})');
+    assert.equal(run('socketClosed'),false);
+    assert.equal(run('capturing'),true);
+    assert.equal(run('pendN'),120000);
+    run('releaseStart()');await pending;
+    assert.equal(run('packets.reduce((n,p)=>n+p.length,0)'),120000);
+    assert.equal(run('packets.every(p=>p.byteLength<=64000)'),true);
+    run('pressed=false;end()');await new Promise(setImmediate);
+  }
   {
     const run = browser();
     await run(`trackpadPanel.hidden=true; $('open-trackpad').onclick()`);
@@ -195,7 +212,7 @@ function browser(store = {}) {
   {
     const run=browser();
     run(`paneSelect.value='w7:p3'; var remoteCommands=[];
-      herdrCommand=async c=>{remoteCommands.push(c);return {pane:c.pane}};
+      activeDesktop={id:'123',herdr:true};desktopCommand=async m=>{const c=m.command;remoteCommands.push(c);return {pane:c.pane}};
       remoteButtons[0].onclick();remoteButtons[1].onclick();remoteButtons[2].onclick();`);
     await new Promise(setImmediate);
     assert.equal(run('remoteCommands[0].pane'), 'w7:p3');
