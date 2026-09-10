@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.1] - 2026-09-10
+
+### Changed
+
+- Split the receiver into focused audio, desktop-control, HTTP, and session
+  modules without changing the browser protocol or service deployment.
+- Split the editable phone UI into HTML, CSS, service-worker, and JavaScript
+  sources, with a deterministic standard-library build into `lib/phone_page.py`.
+- Kept the generated page bytes unchanged and added a stale-artifact check.
+
+### Upgrade notes
+
+- Run the installer, restart `phonemic-web`, and refresh the phone page after
+  upgrading. No pairing, tunnel, or hosting changes are required.
+
 ## [0.2.0] - 2026-09-10
 
 ### Added

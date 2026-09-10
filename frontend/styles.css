@@ -1,0 +1,251 @@
+
+:root{color-scheme:dark;
+/* OLED: unlit black is the default surface. Panels are drawn with hairlines,
+   not fills, and each zone carries its hue in text and borders instead. Solid
+   colour is reserved for the moments that are short-lived: a key under a
+   thumb, the talk bar while the microphone is open. */
+--bg:#000;--well:#000;--surface:#000;--raise:#161D33;--key:#000;
+--line:#4E5C92;--edge:#6A79B4;
+--fg:#F4F7FF;--dim:#B3C0DA;--mute:#7F8CAC;
+--voice:#19F0A6;--voice-ink:#00140D;
+--agent:#7AB4FF;--term:#4FE8E8;--pad:#BBA1FF;
+--warn:#FFC85C;--alert:#FF8E7F;
+--r:14px}
+*{box-sizing:border-box}
+.icon{width:20px;height:20px;flex-shrink:0;display:inline-block;vertical-align:middle;
+fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+#remote .direction-pad .icon{width:24px;height:24px;stroke-width:2.2}
+#remote .remote-scroll button,.remote-edit button,#gear,#picker-close{display:flex;align-items:center;justify-content:center;gap:.35rem}
+.remote-scroll .icon{width:16px;height:16px}
+.context-mark .icon{width:16px;height:16px}
+html,body{height:100%}
+body{height:auto;min-height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);display:flex;flex-direction:column;
+font:16px/1.5 system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:transparent;
+-webkit-user-select:none;user-select:none;overscroll-behavior:none;
+padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+
+/* floating settings key — the top bar is gone, the page starts at the content */
+#gear{position:fixed;top:calc(env(safe-area-inset-top) + .45rem);right:calc(env(safe-area-inset-right) + .55rem);
+z-index:6;width:40px;height:40px;padding:0;border-radius:12px;line-height:1;
+background:var(--bg);border:1px solid var(--line);color:var(--dim)}
+#gear.open{border-color:var(--agent);color:var(--agent)}
+#gear:active{transform:translateY(2px);background:var(--raise)}
+
+#panel[hidden]{display:none}
+#panel{margin:.5rem .55rem 0;border:1px solid var(--line);border-radius:var(--r);
+background:var(--surface);border-left:3px solid var(--agent);
+padding:2.9rem .9rem .8rem;display:flex;flex-direction:column;gap:.7rem;font-size:.85rem}
+#connection-card{border:1px solid var(--line);border-left:3px solid var(--voice);
+border-radius:12px;padding:.85rem;background:var(--bg)}
+#connection-card[hidden]{display:none}
+#connection-card strong{font-size:.92rem;letter-spacing:.01em}
+#connection-card p{color:var(--dim);line-height:1.5;margin:.4rem 0 .7rem}
+#connection-card button{background:var(--bg);color:var(--voice);border:1px solid var(--voice);border-radius:10px;
+padding:.72rem 1rem;font:inherit;font-weight:700;width:100%}
+#connection-card button:active{transform:translateY(2px);background:var(--raise)}
+#connection-address{display:block;color:var(--dim);overflow-wrap:anywhere;margin-top:.55rem;
+font:.75rem/1.4 ui-monospace,SFMono-Regular,monospace}
+.row{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.row label{color:var(--dim)}
+select{background:var(--key);color:var(--fg);border:1px solid var(--edge);border-radius:9px;
+padding:.45rem .6rem;font:inherit;font-size:.85rem}
+input[type=checkbox]{width:1.3rem;height:1.3rem;accent-color:var(--voice)}
+.key{display:flex;gap:.9rem;flex-wrap:wrap;color:var(--dim);font-size:.72rem}
+.key span{display:flex;align-items:center;gap:.35rem}
+.key i{width:.65rem;height:.65rem;border-radius:3px}
+#dis{background:transparent;border:1px solid var(--alert);color:var(--alert);border-radius:10px;
+padding:.55rem;font:600 .8rem system-ui}
+#dis:active{background:#2A1116}
+
+/* middle: waveform + one line of status */
+main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+gap:.5rem;padding:.55rem;min-height:auto}
+#vis{width:100%;max-width:480px;height:44px;background:var(--well);border-radius:12px;
+border:1px solid var(--line)}
+#st{font-size:.85rem;color:var(--fg);text-align:center;min-height:1.3em;font-weight:550}
+#lap{font-size:.75rem;color:var(--mute);text-align:center;min-height:1.1em;max-width:24rem}
+.dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;
+background:var(--mute);margin-right:.45rem;vertical-align:middle}
+.dot.live{background:var(--voice);box-shadow:0 0 0 4px #19F0A62B}
+.dot.warn{background:var(--warn);box-shadow:0 0 0 4px #FFC85C2B}
+
+/* the agent remote — azure is its hue throughout */
+#remote{width:100%;max-width:480px;border:1px solid var(--line);border-radius:var(--r);
+background:var(--surface);border-top:3px solid var(--agent);padding:.7rem;margin-bottom:.4rem}
+.remote-head{display:flex;align-items:center;justify-content:space-between;
+  gap:.5rem;padding-right:44px;margin-bottom:.5rem}
+.remote-head label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem;color:var(--fg);font-weight:650;letter-spacing:.02em}
+#remote #panes{width:100%;min-height:64px;display:flex;align-items:center;gap:.8rem;
+  padding:.7rem .8rem;text-align:left;background:var(--bg);border:1px solid var(--agent);border-radius:12px}
+.context-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:.2rem}
+.context-name{font-size:.92rem;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.context-detail{font:.72rem/1.4 ui-monospace,SFMono-Regular,monospace;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.context-chevron{font-size:1.1rem;color:var(--agent)}
+.agent-dot{width:10px;height:10px;border-radius:50%;flex:0 0 10px;border:2px solid var(--mute);background:transparent}
+.agent-dot.idle{border-color:var(--voice)}
+.agent-dot.working{border-color:var(--warn);background:var(--warn);box-shadow:0 0 0 3px #FFC85C2E}
+.agent-dot.done{border-color:var(--term);background:var(--term);box-shadow:0 0 0 3px #4FE8E82E}
+.agent-dot.blocked{border-color:var(--alert);background:var(--alert);box-shadow:0 0 0 3px #FF8E7F2E}
+
+#pane-picker{position:fixed;inset:auto 0 0;margin:0 auto;width:min(100%,480px);max-width:100%;
+  height:min(78dvh,660px);max-height:92dvh;padding:0;border:1px solid var(--line);border-bottom:0;
+  border-top:3px solid var(--agent);
+  border-radius:20px 20px 0 0;background:var(--bg);color:var(--fg)}
+#pane-picker[open]{display:flex;flex-direction:column}
+#pane-picker::backdrop{background:#000000C7;backdrop-filter:blur(6px)}
+.picker-handle{width:36px;height:4px;background:var(--edge);border-radius:4px;flex-shrink:0;margin:10px auto 0}
+.picker-heading{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem .7rem}
+.picker-heading h2{font-size:1.05rem;margin:0;font-weight:700}
+.picker-heading p{font-size:.75rem;color:var(--dim);margin:.3rem 0 0}
+#picker-close{width:40px;height:40px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--fg);font-size:1.3rem}
+.picker-tabs{display:flex;margin:0 1rem .6rem;border-bottom:1px solid var(--line);gap:1.3rem}
+.picker-tabs button{background:none;border:0;border-bottom:2px solid transparent;color:var(--dim);
+  padding:.7rem 0;font:650 .82rem system-ui;min-height:44px}
+.picker-tabs button[aria-selected=true]{border-bottom-color:var(--agent);color:var(--fg)}
+#picker-list{overflow-y:auto;overscroll-behavior:contain;flex:1;padding:.2rem .55rem 1rem}
+.context-row{width:100%;display:flex;align-items:center;gap:.85rem;padding:.8rem .7rem;
+  min-height:64px;text-align:left;border:1px solid transparent;border-left:3px solid transparent;
+  border-radius:10px;background:none;color:var(--fg)}
+.context-row+.context-row{margin-top:3px}
+.context-row[aria-current=true]{border-left-color:var(--agent)}
+.context-row[aria-current=true] .context-name{color:var(--agent)}
+.context-row:active{background:var(--raise)}
+.context-row .context-name{font-size:.86rem;font-weight:500;font-family:ui-monospace,SFMono-Regular,monospace}
+.context-row[aria-current=true] .context-name{font-weight:700}
+.context-mark{color:var(--agent);font-size:.9rem;width:16px;text-align:center}
+
+/* keycaps: raised, with a real press */
+#remote button{min-height:44px;background:var(--key);border:1px solid var(--edge);
+color:var(--fg);border-radius:10px;font:600 .82rem system-ui;touch-action:manipulation}
+#remote button:active{background:var(--raise)}
+#remote button:disabled{opacity:.38}
+#remote button[aria-pressed=true]{background:var(--voice);border-color:var(--voice);color:var(--voice-ink)}
+#remote [data-key=c][data-ctrl]{color:var(--alert);border-color:#95504A}
+#refresh-panes{padding:0 .7rem;min-height:32px!important}
+.remote-tools,.remote-edit{display:flex;gap:.4rem;margin-top:.6rem}
+.remote-tools button{flex:1;min-width:0}
+.remote-navigation{display:flex;align-items:flex-start;justify-content:space-between;
+  gap:1rem;padding:.75rem .1rem .2rem}
+.direction-pad{display:flex;flex-direction:column;align-items:center;gap:.3rem}
+.direction-middle{display:flex;align-items:center;gap:.3rem}
+#remote .direction-pad button{width:52px;height:46px;font-size:1.3rem;border-radius:12px;
+  background:var(--key);border-color:var(--edge);transition:transform .06s,background .06s}
+.remote-scroll{display:flex;flex-direction:column;gap:.35rem;flex:1;min-width:0;max-width:150px}
+#remote .remote-scroll button{min-height:44px;white-space:nowrap}
+#remote .remote-scroll [data-scroll=bottom]{min-height:34px;background:transparent;border-color:var(--line);color:var(--dim)}
+.remote-edit button{flex:1;min-width:0}
+#remote .remote-edit [data-key=space]{flex:1.3}
+#remote .remote-edit [data-key=enter]{color:var(--voice);border-color:var(--voice)}
+#remote .remote-edit [data-key=enter]:active{background:var(--voice);color:var(--voice-ink)}
+#remote button:active:not(:disabled){transform:translateY(2px)}
+#remote button{touch-action:manipulation;-webkit-touch-callout:none;user-select:none}
+#remote-status:empty{display:none}
+#remote-status{font-size:.74rem;color:var(--dim);margin-top:.5rem;min-height:1.1em}
+
+/* terminal output — cyan is its hue */
+#output-viewer{margin-top:.7rem;border:1px solid var(--line);border-left:3px solid var(--term);
+  border-radius:12px;overflow:hidden;background:var(--well)}
+.output-toolbar{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+  padding:.4rem .6rem;border-bottom:1px solid var(--line);background:var(--bg)}
+.output-toolbar h2{margin:0;font-size:.76rem;font-weight:650;color:var(--term)}
+#remote #open-apps{flex:0 0 40px;width:40px;padding:0;display:flex;align-items:center;justify-content:center}
+.output-actions{display:flex;align-items:center;gap:.3rem}
+#output-viewer button{display:flex;align-items:center;justify-content:center;gap:.3rem;min-height:32px;
+  padding:.3rem .5rem;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--dim);font:600 .72rem system-ui}
+#output-viewer button[aria-pressed=true]{color:var(--term);border-color:var(--term)}
+#output-viewer .icon{width:16px;height:16px}
+[hidden]{display:none!important}
+#command-panel{margin:.65rem 0}
+.command-row{display:flex;flex-wrap:wrap;gap:.4rem;margin:.5rem 0}
+.command-row input,.command-row select{min-width:0;flex:1;background:var(--key);color:var(--fg);border:1px solid var(--edge);border-radius:9px;padding:.6rem}
+#workspace-dialog,#command-dialog{width:min(90vw,430px);box-sizing:border-box;background:var(--surface);color:var(--fg);
+  border:1px solid var(--line);border-top:3px solid var(--agent);border-radius:16px;padding:1.1rem}
+#workspace-dialog::backdrop,#command-dialog::backdrop{background:#000000C7}
+#command-dialog button{padding:.7rem 1rem}
+#command-buttons{margin:0}
+#command-buttons button{overflow-wrap:anywhere;max-width:100%;touch-action:manipulation;-webkit-touch-callout:none}
+#add-command{flex:0 0 auto;width:44px;min-width:44px;height:44px;margin:0;padding:0;font-size:1.4rem;line-height:1;
+  background:var(--agent);border-color:var(--agent);color:var(--bg);border-radius:10px}
+.control-tabs{display:flex;gap:.4rem;margin:.65rem 0}
+.control-tabs button{flex:1;min-width:0}
+.control-tabs button[aria-expanded=true]{border-color:var(--agent)!important;color:var(--agent)!important}
+#composer-panel{margin:.65rem 0}
+#composer,#workspace-dialog input,.output-search input{box-sizing:border-box;width:100%;padding:.7rem;
+  background:var(--key);color:var(--fg);border:1px solid var(--edge);border-radius:10px;font:inherit;margin:.4rem 0}
+#composer{resize:vertical}
+#composer:focus,#workspace-dialog input:focus,.output-search input:focus,.command-row input:focus,select:focus{outline:2px solid var(--agent);outline-offset:1px;border-color:var(--agent)}
+.output-search{padding:0 .6rem}
+.output-search pre{max-height:160px;overflow:auto;white-space:pre-wrap;font-size:.75rem}
+.output-search span{font-size:.75rem;color:var(--dim)}
+.command-hint{font-size:.75rem;color:var(--dim)}
+#output-scroll{height:170px;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y;background:var(--well);scrollbar-color:var(--edge) var(--well)}
+#terminal-output{margin:0;padding:.6rem .75rem;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
+  color:#E8EFF9;background:var(--well);white-space:pre;min-height:100%;width:max-content;min-width:100%;user-select:text;-webkit-user-select:text}
+#output-error{font-size:.72rem;padding:.35rem .65rem;color:var(--alert);border-top:1px solid var(--line)}
+#output-error:empty{display:none}
+#output-dialog{position:fixed;inset:0;margin:0;width:100%;max-width:100%;height:100dvh;max-height:100dvh;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  border:0;background:var(--well);color:var(--fg)}
+#output-dialog #output-viewer{height:100%;margin:0;border:0;border-radius:0;display:flex;flex-direction:column}
+#output-dialog .output-toolbar{padding:.7rem}
+#output-dialog #output-scroll{flex:1;height:auto;min-height:0}
+#output-dialog::backdrop{background:#000000EE}
+
+#apps-dialog{box-sizing:border-box;width:min(94vw,480px);max-height:85dvh;background:var(--bg);color:var(--fg);border:1px solid var(--edge);border-radius:18px;padding:16px}
+#apps-dialog::backdrop{background:#000c}
+.apps-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.apps-head h2{font-size:1.05rem;margin:0}
+#apps-previews,#apps-close{padding:10px 14px;background:var(--bg);color:var(--fg);border:1px solid var(--edge);border-radius:10px}
+#apps-previews[aria-pressed=false]{color:var(--dim)}
+#apps-status{font-size:.78rem;color:var(--dim);margin:12px 0}
+#apps-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.app-card{min-width:0;text-align:left;background:var(--bg);color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:8px;touch-action:manipulation}
+.app-card[aria-pressed=true]{border-color:var(--voice)}
+.app-card:active{background:var(--raise)}
+.app-card:focus-visible{outline:2px solid var(--agent)}
+.app-preview{width:100%;aspect-ratio:16/10;object-fit:contain;background:var(--bg);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:.75rem}
+.app-name,.app-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-name{font-weight:650;font-size:.85rem;margin-top:8px}
+.app-title{font-size:.72rem;color:var(--dim);margin-top:3px}
+/* trackpad — violet is its hue */
+#trackpad-panel{margin-top:.7rem;padding:.9rem 0;border:1px solid var(--line);
+  border-left:3px solid var(--pad);border-radius:14px;background:var(--well);color:var(--fg)}
+#open-trackpad[aria-expanded=true]{border-color:var(--pad)!important;color:var(--pad)!important}
+#trackpad-panel button{min-height:44px;padding:.5rem 1rem;border:1px solid var(--edge);
+  border-radius:10px;background:var(--key);color:var(--fg);font:600 .82rem system-ui;
+  touch-action:manipulation}
+#trackpad-panel button:active{transform:translateY(2px);background:var(--raise)}
+#trackpad-status{margin:0 .9rem .7rem;color:var(--dim);font-size:.8rem;min-height:2.4em}
+#trackpad-pad{height:min(36dvh,280px);margin:0 .9rem;border:1px solid var(--pad);border-radius:16px;
+  background:radial-gradient(#BBA1FF40 1px,transparent 1px) 0 0/18px 18px,var(--well);
+  display:grid;place-items:center;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#trackpad-pad span{text-align:center;background:transparent;padding:1rem;color:var(--dim);pointer-events:none}
+.trackpad-clicks{display:flex;gap:.6rem;margin:.9rem .9rem 0}
+.trackpad-clicks button{flex:1}
+
+/* bottom: the one bold thing — a full-width push-to-talk bar */
+footer{display:flex;justify-content:center;padding:0 .55rem clamp(.9rem,4vh,2rem);
+position:sticky;bottom:0;background:linear-gradient(transparent,#000 34%);padding-top:.7rem;z-index:5}
+#talk{width:100%;max-width:480px;aspect-ratio:auto;height:66px;border-radius:18px;
+border:1px solid var(--voice);background:var(--bg);color:var(--voice);
+font:700 1.05rem/1.2 system-ui;letter-spacing:.01em;
+display:flex;align-items:center;justify-content:center;text-align:center;padding:.8rem;
+transition:background .12s,color .12s,box-shadow .18s,transform .1s;
+touch-action:none;-webkit-touch-callout:none}
+#talk.live{background:var(--voice);color:var(--voice-ink);
+box-shadow:0 0 0 5px #19F0A62E;transform:translateY(1px)}
+#talk.busy{opacity:.55;border-color:var(--edge);color:var(--dim)}
+#talk:active:not(.busy){transform:translateY(3px)}
+:focus-visible{outline:2px solid var(--agent);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+@media(max-height:740px){
+  main{justify-content:flex-start;padding:.45rem;gap:.35rem}
+  #remote{padding:.6rem;margin-bottom:0}
+  #remote button{min-height:40px}
+  #vis{height:26px;flex-shrink:0}
+  #talk{height:58px}
+  footer{padding-bottom:.7rem}
+  #lap{min-height:0}
+}

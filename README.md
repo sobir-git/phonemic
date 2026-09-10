@@ -107,11 +107,21 @@ Wayland app switching is not implemented.
 ## Development
 
 - `phonemic`: CLI and Linux setup.
-- `lib/webmic.py`: receiver and embedded browser UI.
+- `lib/audio.py`: PCM/Opus audio-session state and frame validation.
+- `lib/desktop_control.py`: desktop controls, previews, Herdr context, and dictation.
+- `lib/dictation.py`: local dictation socket bridge.
+- `lib/http_server.py`: HTTP authentication, assets, and WebSocket upgrade routing.
+- `lib/phone_page.py`: embedded browser page and pairing page assets.
+- `lib/session.py`: WebSocket lifecycle and real-time microphone session.
+- `lib/webmic.py`: receiver entry point and compatibility surface.
+- `frontend/`: editable phone HTML, CSS, service worker, and JavaScript sources.
+- `scripts/build_phone_page.py`: deterministic frontend assembly into `lib/phone_page.py`.
+- `lib/herdr.py`: terminal control adapter for Herdr's local socket API.
 - `lib/webauth.py`: pairing, session storage, and revocation.
 - `assets/`, `systemd/`, `scripts/`: icons and deployment helpers.
 
 ```sh
+python3 scripts/build_phone_page.py --check
 python3 -m unittest discover -s tests -v
 node tests/test_phone_ui.js
 ```

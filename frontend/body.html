@@ -1,0 +1,147 @@
+</head><body>
+
+<svg aria-hidden=true focusable=false style="position:absolute;width:0;height:0;overflow:hidden"><defs><symbol id="icon-apps" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol><symbol id="icon-up" viewBox="0 0 24 24"><path d="M6 11l6-6 6 6M12 5v14"/></symbol><symbol id="icon-down" viewBox="0 0 24 24"><path d="m6 13 6 6 6-6M12 5v14"/></symbol><symbol id="icon-left" viewBox="0 0 24 24"><path d="m11 6-6 6 6 6M5 12h14"/></symbol><symbol id="icon-right" viewBox="0 0 24 24"><path d="m13 6 6 6-6 6M5 12h14"/></symbol><symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol><symbol id="icon-chevron-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol><symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol><symbol id="icon-backspace" viewBox="0 0 24 24"><path d="M9 5h11v14H9l-7-7 7-7Z"/><path d="m11 9 6 6m-6 0 6-6"/></symbol><symbol id="icon-enter" viewBox="0 0 24 24"><path d="M20 5v7a3 3 0 0 1-3 3H4m5-5-5 5 5 5"/></symbol><symbol id="icon-bottom" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></symbol><symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 7h7m6 0h3M4 17h3m6 0h7"/><circle cx="14" cy="7" r="3"/><circle cx="10" cy="17" r="3"/></symbol><symbol id="icon-expand" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/></symbol><symbol id="icon-collapse" viewBox="0 0 24 24"><path d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"/></symbol></defs></svg>
+<button id=gear aria-label=Settings><svg class=icon aria-hidden=true focusable=false><use href="#icon-settings"/></svg></button>
+
+<div id=panel hidden>
+  <section id=connection-card hidden aria-label="Connection">
+    <strong id=connection-title>Direct over Wi-Fi</strong>
+    <p id=connection-help>Same Wi-Fi, lower latency. No Tailscale.</p>
+    <button id=switch-connection>Use Wi-Fi connection</button>
+    <small id=connection-address></small>
+  </section>
+  <div class=row><label for=q>Quality</label>
+    <select id=q>
+      <option value="48000:1:20" selected>Voice · 48 kHz · 20 kbps</option>
+      <option value="48000:1:16">Low data · 48 kHz · 16 kbps</option>
+      <option value="48000:0">Studio · 48 kHz raw</option>
+      <option value="24000:1">Voice · 24 kHz PCM fallback</option>
+      <option value="16000:1">Low data · 16 kHz PCM fallback</option>
+    </select>
+  </div>
+  <div class=row><label for=transport>Transport</label>
+    <select id=transport><option value="auto" selected>Auto · Opus</option><option value="pcm">PCM only</option></select>
+  </div>
+  <div class=row><label for=hf>Hands-free (tap to lock on)</label>
+    <input type=checkbox id=hf></div>
+  <div class=row><label for=dictation>Trigger laptop dictation</label>
+    <input type=checkbox id=dictation></div>
+  <div class=key>
+    <span><i style="background:#4A5580"></i>not sent</span>
+    <span><i style="background:#FFC85C"></i>sent</span>
+    <span><i style="background:#19F0A6"></i>received</span>
+  </div>
+  <button id=dis>Disconnect</button>
+</div>
+
+<main>
+  <section id=remote aria-label="Desktop remote control">
+    <div class=remote-head><label id=active-app-label for=panes>Connecting to desktop…</label><div class=output-actions><button id=toggle-output aria-expanded=false aria-controls=output-home>Show output</button><button id=open-apps aria-label="Applications" title="Applications" aria-haspopup=dialog aria-controls=apps-dialog><svg class=icon aria-hidden=true focusable=false><use href="#icon-apps"/></svg></button><button id=refresh-panes>Refresh</button></div></div>
+    <button id=panes value="" aria-label="Switch workspace or agent" aria-haspopup=dialog aria-controls=pane-picker>
+      <span id=picked-dot class=agent-dot aria-hidden=true></span>
+      <span class=context-copy><span id=picked-name class=context-name>Choose an agent</span>
+      <span id=picked-detail class=context-detail>no pane selected</span></span>
+      <span class=context-chevron aria-hidden=true><svg class=icon aria-hidden=true focusable=false><use href="#icon-chevron-down"/></svg></span>
+    </button>
+    <div id=output-home hidden>
+      <section id=output-viewer aria-label="Agent terminal output">
+        <div class=output-toolbar><h2>Live output</h2><div class=output-actions>
+          <button id=follow-output aria-pressed=true aria-label="Follow latest output"><svg class=icon aria-hidden=true focusable=false><use href="#icon-bottom"/></svg><span>Follow</span></button>
+          <button id=expand-output aria-label="Expand terminal output"><svg class=icon aria-hidden=true focusable=false><use id=expand-output-icon href="#icon-expand"/></svg></button>
+        </div></div>
+        <div id=output-scroll tabindex=0 aria-label="Terminal screen, scroll to read">
+          <pre id=terminal-output>Select a pane to see its output.</pre>
+        </div>
+        <div class=output-search><input id=search-output type=search placeholder="Search this screen" aria-label="Search current output"><span id=search-count role=status></span><pre id=search-results hidden></pre></div>
+        <div id=output-error role=status></div>
+      </section>
+    </div>
+    <div class=remote-tools aria-label="Modifiers and shortcuts">
+      <button data-key=esc>Esc</button><button data-key=tab>Tab</button>
+      <button data-mod=ctrl aria-pressed=false>Ctrl</button><button data-mod=alt aria-pressed=false>Alt</button>
+      <button data-key=c data-ctrl=true>Ctrl+C</button><button data-key=u data-ctrl=true>Ctrl+U</button>
+    </div>
+    <div class=control-tabs role=group aria-label="Extra controls">
+      <button id=commands-tab aria-expanded=false aria-controls=command-panel>Commands &amp; panes</button>
+      <button id=composer-tab aria-expanded=false aria-controls=composer-panel>Type a message</button>
+    </div>
+    <section id=command-panel hidden aria-labelledby=commands-tab>
+      <div class=command-row><div id=command-buttons class=command-row><button id=add-command aria-label="Add command" aria-haspopup=dialog>+</button></div></div>
+      <div class=command-row><button id=new-workspace>New space</button><button id=notifications aria-pressed=false>Completion alerts: off</button></div>
+      <p id=notification-status class=command-hint role=status></p>
+      <div class=command-row><button data-pane-action=split>New pane</button><button data-pane-action=close>Close pane</button></div>
+    </section>
+    <section id=composer-panel hidden aria-labelledby=composer-tab>
+      <label for=composer class=command-hint>Draft</label>
+      <textarea id=composer rows=4 maxlength=20000 placeholder="Write or paste a message"></textarea>
+      <div class=command-row><button id=insert-text>Type into pane</button><button id=clear-draft>Clear draft</button></div>
+    </section>
+    <div class=remote-navigation>
+      <div class=direction-pad role=group aria-label="Arrow keys">
+        <button data-key=up aria-label="Up arrow"><svg class=icon aria-hidden=true focusable=false><use href="#icon-up"/></svg></button>
+        <div class=direction-middle>
+          <button data-key=left aria-label="Left arrow"><svg class=icon aria-hidden=true focusable=false><use href="#icon-left"/></svg></button>
+          <button data-key=down aria-label="Down arrow"><svg class=icon aria-hidden=true focusable=false><use href="#icon-down"/></svg></button>
+          <button data-key=right aria-label="Right arrow"><svg class=icon aria-hidden=true focusable=false><use href="#icon-right"/></svg></button>
+        </div>
+      </div>
+      <div class=remote-scroll role=group aria-label="Scroll history">
+        <button data-scroll=up><svg class=icon aria-hidden=true focusable=false><use href="#icon-up"/></svg><span>Scroll up</span></button>
+        <button data-scroll=down><svg class=icon aria-hidden=true focusable=false><use href="#icon-down"/></svg><span>Scroll down</span></button>
+        <button data-scroll=bottom><span>Latest</span><svg class=icon aria-hidden=true focusable=false><use href="#icon-bottom"/></svg></button>
+      </div>
+    </div>
+    <div class=remote-edit aria-label="Editing keys">
+      <button data-key=backspace aria-label=Backspace><svg class=icon aria-hidden=true focusable=false><use href="#icon-backspace"/></svg></button>
+      <button id=open-trackpad aria-expanded=false aria-controls=trackpad-panel>Trackpad</button>
+      <button data-key=space>Space</button>
+      <button data-key=enter><span>Enter</span><svg class=icon aria-hidden=true focusable=false><use href="#icon-enter"/></svg></button>
+    </div>
+<section id=trackpad-panel hidden aria-label="Laptop trackpad">
+  <p id=trackpad-status role=status>Slide to move. Tap to click.</p>
+  <div id=trackpad-pad aria-label="Slide to move the laptop pointer, tap to click"></div>
+  <div class=trackpad-clicks><button id=trackpad-left>Left click</button><button id=trackpad-right>Right click</button></div>
+</section>
+    <div id=remote-status role=status>Choose a pane to control.</div>
+  </section>
+  <canvas id=vis width=840 height=176></canvas>
+  <div id=st><span class="dot" id=d></span>Ready</div>
+  <div id=lap></div>
+</main>
+
+<footer><button id=talk>Touch to talk</button></footer>
+
+
+<dialog id=apps-dialog aria-labelledby=apps-heading>
+<div class=apps-head><h2 id=apps-heading>Applications</h2><div><button id=apps-previews aria-pressed=true>Previews</button><button id=apps-close aria-label="Close applications">Close</button></div></div>
+<p id=apps-status role=status>Loading windows…</p><div id=apps-grid></div>
+</dialog>
+<dialog id=output-dialog aria-label="Expanded terminal output"></dialog>
+<dialog id=workspace-dialog aria-labelledby=workspace-heading>
+  <h2 id=workspace-heading>New space</h2>
+  <form id=create-workspace>
+    <label for=workspace-name>Name</label><input id=workspace-name maxlength=100 required>
+    <label for=workspace-directory>Directory, optional</label><input id=workspace-directory maxlength=4096 placeholder="Use selected pane's directory">
+    <p id=workspace-error role=status></p>
+    <div class=command-row><button type=button id=cancel-workspace>Cancel</button><button id=save-workspace type=submit>Create</button></div>
+  </form>
+</dialog>
+<dialog id=command-dialog aria-labelledby=command-heading>
+  <h2 id=command-heading>Add command</h2>
+  <form id=save-command>
+    <label for=custom-command>Command text</label>
+    <div class=command-row><input id=custom-command maxlength=2000 placeholder="Your command" required></div>
+    <p id=command-error role=status></p>
+    <div class=command-row><button type=button id=cancel-command>Cancel</button><button type=submit>Save</button></div>
+  </form>
+</dialog>
+<dialog id=pane-picker aria-labelledby=picker-heading>
+  <div class=picker-handle></div>
+  <div class=picker-heading><div><h2 id=picker-heading>Herdr</h2><p id=picker-summary>Live Herdr sessions</p></div>
+    <button id=picker-close aria-label="Close picker"><svg class=icon aria-hidden=true focusable=false><use href="#icon-close"/></svg></button></div>
+  <div class=picker-tabs role=tablist aria-label="Browse Herdr">
+    <button id=view-spaces role=tab aria-selected=false>Spaces</button>
+    <button id=view-agents role=tab aria-selected=true>Agents</button>
+  </div>
+  <div id=picker-list role=tabpanel></div>
+</dialog>
