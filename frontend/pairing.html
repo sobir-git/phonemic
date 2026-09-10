@@ -1,0 +1,32 @@
+<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>Pair PhoneMic</title>
+<link rel=manifest href=/manifest.webmanifest>
+<style>body{background:#000;color:#f4f7ff;font:16px/1.5 system-ui;max-width:380px;margin:10vh auto;padding:24px}
+input,button{box-sizing:border-box;width:100%;font:inherit;padding:14px;border-radius:10px;margin:8px 0}
+input{background:#000;color:inherit;border:1px solid #5a68a0}
+button{background:#000;border:1px solid #19f0a6;color:#19f0a6;font-weight:650}
+button:active{background:#19f0a6;color:#00140d}
+small{color:#b3c0da}code{white-space:nowrap;color:#4fe8e8}#error{color:#ff8e7f}</style></head><body>
+<h1>Pair this browser</h1><p>On your computer, run <code>phonemic browser pair</code>, then enter the code below.</p>
+<form id=pair-form><label for=code>Pairing code</label><input id=code autocomplete=one-time-code maxlength=32 required autofocus>
+<button id=submit>Pair browser</button></form><p id=error role=alert></p>
+<small>Only one browser can be paired. Pairing here replaces the previous browser.</small>
+<script>
+const params=new URLSearchParams(location.hash.slice(1)),ticket=params.get('handoff');
+params.delete('handoff');history.replaceState(null,'',location.pathname);
+async function exchange(header,value){
+ const response=await fetch('/auth/pair',{headers:{[header]:value},cache:'no-store'});
+ if(!response.ok)throw Error('Code expired or incorrect. Generate a new code on the computer.');
+ history.replaceState(null,'','/'+(params.toString()?'#'+params.toString():''));
+ location.reload();
+}
+document.getElementById('pair-form').onsubmit=async e=>{
+ e.preventDefault();document.getElementById('submit').disabled=true;
+ try{await exchange('X-PhoneMic-Pairing',document.getElementById('code').value);}
+ catch(error){document.getElementById('error').textContent=error.message;}
+ finally{document.getElementById('submit').disabled=false;}
+};
+if(ticket)exchange('X-PhoneMic-Handoff',ticket).catch(()=>{document.getElementById('error').textContent='Connection switch expired. Switch again from the paired page.';});
+// Strict cookies may be omitted on the first navigation from another site.
+else fetch('/auth/status',{cache:'no-store'}).then(r=>{if(r.ok)location.reload();}).catch(()=>{});
+</script></body></html>

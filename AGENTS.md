@@ -11,7 +11,15 @@ Do not create a cloud deployment or change hosting providers unless requested.
 ## Code layout
 
 - `phonemic`: command-line tool and service setup.
-- `lib/webmic.py`: Python receiver and embedded phone HTML, CSS, and JavaScript.
+- `lib/audio.py`: connection-local PCM/Opus negotiation and frame handling.
+- `lib/desktop_control.py`: desktop controls, previews, Herdr context, and dictation.
+- `lib/http_server.py`: HTTP authentication, assets, and WebSocket upgrade routing.
+- `lib/phone_page.py`: embedded browser HTML, CSS, JavaScript, and pairing page.
+- `lib/session.py`: WebSocket lifecycle and real-time microphone session.
+- `lib/webmic.py`: receiver configuration, service entry point, and compatibility surface.
+- `frontend/`: editable phone HTML, CSS, service worker, and JavaScript sources.
+- `scripts/build_phone_page.py`: deterministic frontend assembly into `lib/phone_page.py`.
+- `lib/herdr.py`: allowlisted terminal controls over the local Herdr socket.
 - `assets/`: phone app icons.
 - `systemd/phonemic-web.service`: receiver service template.
 
@@ -31,7 +39,13 @@ For the default installation, deploy from the repository root:
 
 ```sh
 install -m 644 lib/herdr_detect.py "$HOME/.local/share/phonemic/lib/herdr_detect.py"
+install -m 644 lib/audio.py "$HOME/.local/share/phonemic/lib/audio.py"
+install -m 644 lib/desktop_control.py "$HOME/.local/share/phonemic/lib/desktop_control.py"
+install -m 644 lib/http_server.py "$HOME/.local/share/phonemic/lib/http_server.py"
+install -m 644 lib/phone_page.py "$HOME/.local/share/phonemic/lib/phone_page.py"
+install -m 644 lib/herdr.py "$HOME/.local/share/phonemic/lib/herdr.py"
 install -m 644 lib/desktop.py "$HOME/.local/share/phonemic/lib/desktop.py"
+install -m 644 lib/session.py "$HOME/.local/share/phonemic/lib/session.py"
 install -m 644 lib/webauth.py "$HOME/.local/share/phonemic/lib/webauth.py"
 install -m 644 lib/webmic.py "$HOME/.local/share/phonemic/lib/webmic.py"
 systemctl --user restart phonemic-web

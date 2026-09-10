@@ -31,18 +31,19 @@ After the candidate is tested and the working tree contains only intended
 changes:
 
 ```sh
-git add -- lib/webmic.py tests/test_phone_ui.js README.md CHANGELOG.md docs/releases.md
+git add -- AGENTS.md README.md CHANGELOG.md docs/releases.md install.sh \
+  frontend lib scripts tests
 git diff --cached --check
-git commit -m "Release 0.2.0: improve mobile audio transport"
-git tag -a v0.2.0 -m "PhoneMic 0.2.0: mobile audio transport improvements"
-git push --atomic origin refs/heads/main:refs/heads/main refs/tags/v0.2.0:refs/tags/v0.2.0
+git commit -m "Release 0.2.1: split receiver and phone sources"
+git tag -a v0.2.1 -m "PhoneMic 0.2.1: split receiver and phone sources"
+git push --atomic origin refs/heads/main:refs/heads/main refs/tags/v0.2.1:refs/tags/v0.2.1
 ```
 
 Use the actual reviewed version in every command. Never replace an existing
 tag or use a force push. Verify the pushed tag points to the tested commit:
 
 ```sh
-git ls-remote origin refs/heads/main refs/tags/v0.2.0 'refs/tags/v0.2.0^{}'
+git ls-remote origin refs/heads/main refs/tags/v0.2.1 'refs/tags/v0.2.1^{}'
 ```
 
 ## Local deployment and rollback

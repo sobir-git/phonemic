@@ -111,127 +111,40 @@ class BufferedAudioTests(unittest.IsolatedAsyncioTestCase):
         sink.stdin.write.assert_called_once_with(samples)
         bridge.finish.assert_awaited_once_with(abort=False)
 
+    async def test_slow_control_does_not_delay_audio(self):
+        started = asyncio.Event()
+        release = asyncio.Event()
+        samples = b"\x01\x00" * 480
 
-class HerdrTests(unittest.IsolatedAsyncioTestCase):
-    async def test_claude_scroll_sends_mouse_wheel_to_selected_pane(self):
-        for direction, button in [('up', 64), ('down', 65)]:
-            remote = webmic.Herdr()
-            remote.request = AsyncMock(side_effect=[
-                {'pane': {'agent': 'claude', 'scroll': {'max_offset_from_bottom': 0}}},
-                {'layout': {'panes': [{'pane_id': 'w1:p1', 'rect': {'width': 110, 'height': 34}}]}}, {}])
-            await remote.control({'action': 'scroll', 'pane': 'w1:p1', 'direction': direction})
-            self.assertEqual(remote.request.await_args.args, ('pane.send_text',
-                {'pane_id': 'w1:p1', 'text': f'\x1b[<{button};55;17M'*3}))
+        class Remote:
+            async def control(self, command):
+                started.set()
+                await release.wait()
+                return {"panes": []}
 
-    async def test_claude_latest_wheels_until_screen_stops_changing(self):
-        remote = webmic.Herdr()
-        remote.request = AsyncMock(side_effect=[
-            {'pane': {'agent': 'claude', 'scroll': {'max_offset_from_bottom': 0}}},
-            {'layout': {'panes': [{'pane_id': 'w1:p1', 'rect': {'width': 110, 'height': 34}}]}},
-            {'read': {'text': 'older'}}, {}, {'read': {'text': 'latest'}}, {}, {'read': {'text': 'latest'}}])
-        await remote.control({'action': 'scroll', 'pane': 'w1:p1', 'direction': 'bottom'})
-        wheels = [c.args for c in remote.request.await_args_list if c.args[0] == 'pane.send_text']
-        self.assertEqual(wheels, [('pane.send_text', {'pane_id': 'w1:p1', 'text': '\x1b[<65;55;17M'*40})]*2)
+        class Phone:
+            phonemic_auth = ("test", "http://localhost")
+            remote_address = None
+            transport = None
+            send = AsyncMock()
 
-    async def test_commands_and_clear_input(self):
-        remote = webmic.Herdr()
-        remote.request = AsyncMock(return_value={})
-        await remote.control({'action': 'command', 'pane': 'w1:p1', 'text': 'cc-yolo'})
-        self.assertEqual([c.args for c in remote.request.await_args_list], [
-            ('pane.send_text', {'pane_id': 'w1:p1', 'text': 'cc-yolo'})])
-        remote.request.reset_mock()
-        for text in ['', 'a\nb', '\x1b', 'a'*2001]:
-            with self.assertRaises(RuntimeError):
-                await remote.control({'action': 'command', 'pane': 'w1:p1', 'text': text})
-        remote.request.assert_not_awaited()
-        await remote.control({'action': 'key', 'pane': 'w1:p1', 'key': 'u', 'modifiers': ['ctrl']})
-        remote.request.assert_awaited_once_with('pane.send_keys', {'pane_id': 'w1:p1', 'keys': ['ctrl+u']})
+            async def __aiter__(self):
+                yield json.dumps({"herdr": {"action": "list"}, "id": 1})
+                yield samples
 
-    async def test_composer_inserts_multiline_text_without_keys(self):
-        remote = webmic.Herdr()
-        remote.request = AsyncMock(return_value={})
-        await remote.control({'action': 'text', 'pane': 'w1:p1', 'text': 'hello\nworld'})
-        remote.request.assert_awaited_once_with('pane.send_text', {'pane_id': 'w1:p1', 'text': 'hello\nworld'})
-        remote.request.reset_mock()
-        for text in ['\x1b[31m', 'a'*20001]:
-            with self.assertRaises(RuntimeError):
-                await remote.control({'action': 'text', 'pane': 'w1:p1', 'text': text})
-        remote.request.assert_not_awaited()
-
-    async def test_create_workspace_uses_selected_directory(self):
-        remote = webmic.Herdr()
-        remote.request = AsyncMock(side_effect=[{'pane': {'cwd': '/tmp/project'}}, {'root_pane': {'pane_id': 'w2:p1'}}])
-        result = await remote.control({'action': 'workspace', 'pane': 'w1:p1', 'label': 'New project'})
-        self.assertEqual(result, {'pane': 'w2:p1'})
-        self.assertEqual(remote.request.await_args.args, ('workspace.create', {'label': 'New project', 'cwd': '/tmp/project', 'focus': True}))
-        remote.request.reset_mock()
-        with self.assertRaises(RuntimeError):
-            await remote.control({'action': 'workspace', 'label': 'New', 'cwd': 'relative/path'})
-        remote.request.assert_not_awaited()
-
-    async def test_split_preserves_space_and_directory(self):
-        remote = webmic.Herdr()
-        remote.request = AsyncMock(side_effect=[{'pane': {'workspace_id': 'w1', 'cwd': '/tmp/project'}}, {'pane': {'pane_id': 'w1:p2'}}])
-        self.assertEqual(await remote.control({'action': 'split', 'pane': 'w1:p1'}), {'pane': 'w1:p2'})
-        self.assertEqual(remote.request.await_args.args, ('pane.split', {
-            'target_pane_id': 'w1:p1', 'workspace_id': 'w1', 'direction': 'down', 'cwd': '/tmp/project', 'focus': True}))
-
-    async def test_inventory_exposes_only_picker_metadata(self):
-        remote = webmic.Herdr()
-        remote.request = AsyncMock(side_effect=[
-            {'workspaces': [{'workspace_id': 'w1', 'label': 'Project'}]},
-            {'panes': [{'workspace_id': 'w1', 'pane_id': 'w1:p1',
-                        'terminal_title_stripped': 'Agent', 'focused': True, 'agent': 'codex', 'agent_status': 'working',
-                        'agent_session': {'private': 'not needed'}, 'tab_id': 'w1:t1'}]},
-            {'tabs': [{'tab_id': 'w1:t1', 'label': 'chatbot'}]},
-        ])
-        result = await remote.control({'action': 'list'})
-        self.assertEqual(result, {'panes': [{'id': 'w1:p1', 'workspace': 'Project',
-                                           'title': 'chatbot', 'focused': True, 'workspace_id': 'w1',
-                                           'workspace_state': 'unknown', 'state': 'working', 'agent': 'codex'}]})
-        self.assertEqual([call.args for call in remote.request.await_args_list], [
-            ('workspace.list', {}), ('pane.list', {}), ('tab.list', {})])
-
-    async def test_modifiers_and_keys_target_explicit_pane(self):
-        remote = webmic.Herdr()
-        remote.request = AsyncMock(return_value={})
-        await remote.control({'action': 'key', 'pane': 'w2:p3', 'key': 'backspace',
-                              'modifiers': ['alt', 'ctrl']})
-        remote.request.assert_awaited_once_with('pane.send_keys', {
-            'pane_id': 'w2:p3', 'keys': ['ctrl+alt+backspace']})
-
-    async def test_scroll_is_clamped_to_available_history(self):
-        remote = webmic.Herdr()
-        remote.request = AsyncMock(side_effect=[
-            {'pane': {'scroll': {'offset_from_bottom': 95, 'max_offset_from_bottom': 100,
-                                 'viewport_rows': 40}}}, {},
-        ])
-        await remote.control({'action': 'scroll', 'pane': 'w2:p3', 'direction': 'up'})
-        self.assertEqual(remote.request.await_args.args, ('pane.scroll', {
-            'pane_id': 'w2:p3', 'offset_from_bottom': 100}))
-
-    async def test_unlisted_keys_and_arbitrary_methods_never_reach_herdr(self):
-        remote = webmic.Herdr()
-        remote.request = AsyncMock()
-        for command in (
-            {'action': 'server.stop'},
-            {'action': 'key', 'key': 'some text'},
-            {'action': 'key', 'key': 'enter', 'modifiers': ['super']},
-            {'action': 'key', 'key': 'c'},
-            {'action': 'scroll', 'direction': 'sideways'},
-        ):
-            with self.assertRaises(RuntimeError):
-                await remote.control({'pane': 'w2:p3', **command})
-        remote.request.assert_not_awaited()
-
-
-class OutputReadTests(unittest.IsolatedAsyncioTestCase):
-    async def test_read_is_bounded_and_targets_requested_pane(self):
-        remote = webmic.Herdr()
-        remote.request = AsyncMock(return_value={'read': {'text': 'a'*120001, 'truncated': False}})
-        result = await remote.control({'action': 'read', 'pane': 'w4:p2', 'lines': 999999})
-        remote.request.assert_awaited_once_with('pane.read', {
-            'pane_id': 'w4:p2', 'source': 'visible', 'format': 'ansi', 'strip_ansi': False, 'lines': 160})
-        self.assertEqual(result['pane'], 'w4:p2')
-        self.assertEqual(len(result['text']), 120000)
-        self.assertTrue(result['truncated'])
+        bridge = SimpleNamespace(start=AsyncMock(), finish=AsyncMock(), close=AsyncMock())
+        sink = MagicMock()
+        with patch.object(webmic, "Herdr", return_value=Remote()), \
+             patch.object(webmic, "Dictation", return_value=bridge), \
+             patch.object(webmic, "spawn_sink", return_value=sink), \
+             patch.object(webmic, "stop_proc"), \
+             patch.object(webmic, "report", new=AsyncMock()), \
+             patch.object(webmic, "report_desktop", new=AsyncMock()), \
+             patch.object(webmic, "report_herdr", new=AsyncMock()), \
+             patch.object(webmic, "guard_session", new=AsyncMock()), \
+             patch.object(webmic.AUTH, "valid", return_value=True):
+            task = asyncio.create_task(webmic.handler(Phone()))
+            await asyncio.wait_for(started.wait(), 1)
+            sink.stdin.write.assert_called_once_with(samples)
+            release.set()
+            await task
