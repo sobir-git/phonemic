@@ -66,6 +66,12 @@ Allow microphone access, then select **PhoneMic-2** in
 your computer's audio app. Keep the phone page visible for reliable streaming.
 For Android USB, use `phonemic on` / `phonemic off` and select **PhoneMic**.
 
+For phone streaming, **Voice · 48 kHz · 20 kbps** is the recommended balance
+of quality and network usage. Use **Low data · 48 kHz · 16 kbps** on a weak
+connection. These profiles use Opus when the browser supports WebCodecs and the
+receiver has `libopus`; PCM fallback remains available from the audio settings.
+The displayed bitrate is the codec target, not the total network rate.
+
 Only one browser pairing is active. Pairing another replaces it and disconnects
 the previous browser. Codes expire after five minutes or ten failed attempts;
 browser access lasts 90 days. Use `phonemic browser status` to check it and
@@ -111,6 +117,8 @@ node tests/test_phone_ui.js
 ```
 
 See [service notes](docs/systemd.md) for operations and the optional LAN setup.
+See [release notes and gates](docs/releases.md) for versioning, publishing, and
+local rollback.
 The LAN scripts read your hostname from local configuration; adapt the interface.
 [AGENTS.md](AGENTS.md)
 describes the author's deployment workflow; adapt it before using it elsewhere.

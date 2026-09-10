@@ -11,7 +11,7 @@ Serve plain HTTP behind a TLS-terminating proxy (Cloudflare Tunnel), or supply
 PM_CERT/PM_KEY to serve HTTPS directly. getUserMedia requires a secure context
 either way.
 """
-import asyncio, json, os, pathlib, ssl, subprocess, sys, signal, time
+import asyncio, ctypes, ctypes.util, json, os, pathlib, ssl, subprocess, sys, signal, time
 from contextlib import AsyncExitStack
 import base64, hashlib, re
 from http.cookies import SimpleCookie
@@ -39,6 +39,64 @@ ASSETS = pathlib.Path(os.environ.get("PM_ASSETS",
 RATE   = int(os.environ.get("PM_RATE", "48000"))
 # Requested sink latency. Lower = less delay, more chance of glitching.
 LATENCY = int(os.environ.get("PM_LATENCY_MS", "20"))
+
+_OPUS = None
+
+def opus_library():
+    """Load libopus lazily so PCM-only installations keep working."""
+    global _OPUS
+    if _OPUS is False:
+        return None
+    if _OPUS is not None:
+        return _OPUS
+    try:
+        name = ctypes.util.find_library("opus") or "libopus.so.0"
+        lib = ctypes.CDLL(name)
+        lib.opus_decoder_create.argtypes = [ctypes.c_int32, ctypes.c_int,
+                                             ctypes.POINTER(ctypes.c_int)]
+        lib.opus_decoder_create.restype = ctypes.c_void_p
+        lib.opus_decoder_destroy.argtypes = [ctypes.c_void_p]
+        lib.opus_decoder_destroy.restype = None
+        lib.opus_packet_get_nb_samples.argtypes = [ctypes.c_void_p, ctypes.c_int32,
+                                                   ctypes.c_int32]
+        lib.opus_packet_get_nb_samples.restype = ctypes.c_int
+        lib.opus_decode.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32,
+                                    ctypes.POINTER(ctypes.c_int16), ctypes.c_int, ctypes.c_int]
+        lib.opus_decode.restype = ctypes.c_int
+        _OPUS = lib
+    except Exception:
+        _OPUS = False
+    return _OPUS if _OPUS is not False else None
+
+class OpusDecoder:
+    """Small raw-Opus decoder wrapper for one mono 48 kHz stream."""
+    def __init__(self):
+        lib = opus_library()
+        if lib is None:
+            raise RuntimeError("Opus is unavailable on this laptop")
+        error = ctypes.c_int(0)
+        self.lib = lib
+        self.ptr = lib.opus_decoder_create(48000, 1, ctypes.byref(error))
+        if not self.ptr or error.value < 0:
+            raise RuntimeError("Could not create the Opus decoder")
+
+    def decode(self, packet):
+        if not packet or len(packet) > 1275:
+            raise RuntimeError("Invalid Opus packet")
+        raw = ctypes.create_string_buffer(packet)
+        frames = self.lib.opus_packet_get_nb_samples(raw, len(packet), 48000)
+        if frames != 960:
+            raise RuntimeError("Opus packet is not 20 ms")
+        pcm = (ctypes.c_int16 * 960)()
+        decoded = self.lib.opus_decode(self.ptr, raw, len(packet), pcm, 960, 0)
+        if decoded != 960:
+            raise RuntimeError("Opus decoder rejected the packet")
+        return bytes(pcm), decoded
+
+    def close(self):
+        if self.ptr:
+            self.lib.opus_decoder_destroy(self.ptr)
+            self.ptr = None
 
 from websockets.asyncio.server import serve
 from websockets.http11 import Response
@@ -389,10 +447,15 @@ box-shadow:0 0 0 5px #19F0A62E;transform:translateY(1px)}
   </section>
   <div class=row><label for=q>Quality</label>
     <select id=q>
+      <option value="48000:1:20" selected>Voice · 48 kHz · 20 kbps</option>
+      <option value="48000:1:16">Low data · 48 kHz · 16 kbps</option>
       <option value="48000:0">Studio · 48 kHz raw</option>
-      <option value="24000:1" selected>Voice · 24 kHz</option>
-      <option value="16000:1">Low data · 16 kHz</option>
+      <option value="24000:1">Voice · 24 kHz PCM fallback</option>
+      <option value="16000:1">Low data · 16 kHz PCM fallback</option>
     </select>
+  </div>
+  <div class=row><label for=transport>Transport</label>
+    <select id=transport><option value="auto" selected>Auto · Opus</option><option value="pcm">PCM only</option></select>
   </div>
   <div class=row><label for=hf>Hands-free (tap to lock on)</label>
     <input type=checkbox id=hf></div>
@@ -520,12 +583,15 @@ box-shadow:0 0 0 5px #19F0A62E;transform:translateY(1px)}
 <script id=connection-config type="application/json">__CONNECTION_CONFIG__</script>
 <script>
 const $=i=>document.getElementById(i);
-const talk=$('talk'),st=$('st'),lap=$('lap'),hf=$('hf'),dis=$('dis'),q=$('q'),
+const talk=$('talk'),st=$('st'),lap=$('lap'),hf=$('hf'),dis=$('dis'),q=$('q'),transport=$('transport'),
       gear=$('gear'),panel=$('panel'),vis=$('vis'),g=vis.getContext('2d'),dictation=$('dictation');
 let ws,ctx,node,src,stream,lock=null;
 let ready=false,talking=false,connecting=false,gen=0,pressed=false,starting=false;
 let dictationWait=null, audioInit=null, capturing=false;
 let reconnectTimer=null,reconnectDelay=1000,manualDisconnect=false,lastMessageAt=0;
+let audioCodec='pcm',audioFraming='pcm',audioCaps=null,capabilityWait=null,audioReadyWait=null,audioEndWait=null,audioNegotiationId=0;
+let opusEncoder=null,opusPending=[],opusPendingN=0,opusStream=0,opusSeq=0,opusTimestamp=0;
+let opusFailed=false,opusEnding=false,opusReady=false,endingPromise=null,wireSent=0;
 const paneSelect=$('panes'),remoteStatus=$('remote-status'),refreshPanes=$('refresh-panes');
 const remoteButtons=Array.from(document.querySelectorAll('#remote [data-key],#remote [data-mod],#remote [data-scroll],#remote [data-pane-action]'));
 let inventory=[],pickerView='agents',workspaceFilter=null,queuedPane=null;
@@ -546,7 +612,7 @@ function diagnostic(event,extra={}){
  const entry={event,client:debugClient,seq:++debugSeq,time_ms:Date.now(),...extra};
  try{Object.assign(entry,{ready,starting,talking,capturing,hidden:!!document.hidden,online:navigator.onLine!==false,
   dictation:dictation.checked,socket:ws?.readyState??3,queued_samples:pendN,buffered_bytes:ws?.bufferedAmount||0,
-  sent_bytes:sent,received_bytes:debugRx,audio_state:ctx?.state||'none',app_mode:activeDesktop?.herdr?'herdr':activeDesktop?.id?'generic':'none'});}catch{}
+  sent_bytes:wireSent,received_bytes:debugRx,audio_state:ctx?.state||'none',app_mode:activeDesktop?.herdr?'herdr':activeDesktop?.id?'generic':'none'});}catch{}
  debugQueue.push(entry);debugQueue=debugQueue.slice(-60);saveDebug();
  if(!debugTimer)debugTimer=setTimeout(flushDebug,250);
 }
@@ -562,14 +628,16 @@ globalThis.addEventListener?.('error',e=>diagnostic('javascript-error',{...debug
 globalThis.addEventListener?.('unhandledrejection',e=>diagnostic('unhandled-rejection',debugError(e.reason)));
 setInterval(()=>{if(starting||capturing||talking)diagnostic('recording-progress');},5000);
 
-try{ const v=localStorage.getItem('pm.q'); if(v) q.value=v; }catch(e){}
+try{ const v=localStorage.getItem('pm.q'); if(v) q.value=v==='48000:1'?'48000:1:20':v; }catch(e){}
+try{ const v=localStorage.getItem('pm.transport'); if(v==='auto'||v==='pcm') transport.value=v; }catch(e){}
 try{ hf.checked = localStorage.getItem('pm.hf')==='1'; }catch(e){}
 try{ dictation.checked = localStorage.getItem('pm.dictation')==='1'; }catch(e){}
 // Carry only preferences across origins; each origin asks for its own mic permission.
 try{
   const handoff=new URLSearchParams(location.hash.slice(1));
   if(handoff.has('pmq')){
-    if(['48000:0','24000:1','16000:1'].includes(handoff.get('pmq')))q.value=handoff.get('pmq');
+    if(['48000:1','48000:1:20','48000:1:16','48000:0','24000:1','16000:1'].includes(handoff.get('pmq'))){const v=handoff.get('pmq');q.value=v==='48000:1'?'48000:1:20':v;}
+    if(['auto','pcm'].includes(handoff.get('pmt')))transport.value=handoff.get('pmt');
     hf.checked=handoff.get('pmhf')==='1';dictation.checked=handoff.get('pmd')==='1';
     localStorage.setItem('pm.q',q.value);localStorage.setItem('pm.hf',hf.checked?'1':'0');
     localStorage.setItem('pm.dictation',dictation.checked?'1':'0');
@@ -595,14 +663,14 @@ function setupConnection(){
       const response=await fetch('/auth/handoff',{headers:{'X-PhoneMic-Target':next.origin},cache:'no-store'});
       if(!response.ok)throw Error('Pair this browser again before switching connections.');
       const {ticket}=await response.json();
-      next.hash=new URLSearchParams({handoff:ticket,pmq:q.value,pmhf:hf.checked?'1':'0',pmd:dictation.checked?'1':'0'}).toString();
+      next.hash=new URLSearchParams({handoff:ticket,pmq:q.value,pmt:transport.value,pmhf:hf.checked?'1':'0',pmd:dictation.checked?'1':'0'}).toString();
       location.assign(next.href);
     }catch(error){$('connection-help').textContent=error.message;}
 
   };
 }
 setupConnection();
-const quality=()=>{ const [r,pr]=q.value.split(':'); return {rate:+r, proc:pr==='1'}; };
+const quality=()=>{ const [r,pr,b]=q.value.split(':'); return {rate:+r, proc:pr==='1', bitrate:+b||0}; };
 const say=(t,c)=>{st.textContent=t;const dot=document.createElement('span');dot.className='dot '+(c||'');st.prepend(dot);};
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
@@ -644,7 +712,7 @@ requestAnimationFrame(draw);
 
 function paint(){
   talk.className = (talking||capturing)?'live':starting?'busy':'';
-  dictation.disabled=q.disabled=hf.disabled=starting||talking;
+  dictation.disabled=q.disabled=transport.disabled=hf.disabled=starting||talking;
   talk.textContent = (talking||capturing) ? (hf.checked?'On — tap to stop':'Recording')
     : starting?'Opening mic…':(hf.checked?'Tap to ':'Touch to ')+(dictation.checked?'dictate':'talk');
   paintRemote();
@@ -697,6 +765,22 @@ async function connectSocket(){
   const socket=ws;
   ws.binaryType='arraybuffer';
   ws.onmessage=e=>{ if(ws!==socket) return; lastMessageAt=Date.now(); try{ const m=JSON.parse(e.data);
+    if(m.type==='audio-capabilities'){
+      if(capabilityWait&&(m.id===capabilityWait.id||(m.id==null&&capabilityWait.allowLegacy))){
+        const pending=capabilityWait;capabilityWait=null;clearTimeout(pending.timer);
+        if(!m.error){audioCaps=m;audioCodec=m.codec==='opus'?'opus':'pcm';audioFraming=m.framing||'pcm';}
+        pending.resolve(m);
+      }
+      return;
+    }
+    if(m.type==='audio-ready'){
+      if(audioReadyWait&&m.stream===audioReadyWait.stream){const pending=audioReadyWait;audioReadyWait=null;clearTimeout(pending.timer);m.error?pending.reject(Error(m.error)):pending.resolve(m)}
+      return;
+    }
+    if(m.type==='audio-ended'){
+      if(audioEndWait&&m.stream===audioEndWait.stream){const pending=audioEndWait;audioEndWait=null;clearTimeout(pending.timer);m.error?pending.reject(Error(m.error)):pending.resolve(m)}
+      return;
+    }
     if(m.type==='desktop-context'){applyDesktopContext(m.result);return;}
     if(m.type==='desktop'){diagnostic(m.error?'desktop-error':'desktop-ready',{request_id:m.id||0});const p=desktopPending.get(m.id);if(p){desktopPending.delete(m.id);clearTimeout(p.timer);m.error?p.reject(Error(m.error)):p.resolve(m.result);}return;}
     if(m.type==='mouse'){
@@ -726,22 +810,44 @@ async function connectSocket(){
   });
   if(ws!==socket||socket.readyState!==1) throw new Error('Connection closed'); }
   catch(e){ if(ws===socket){connecting=false;talk.classList.remove('busy');say('Could not reach the computer — retrying…','warn');} checkBrowserAccess();return false; }
-  ws.send(JSON.stringify({rate:ctx?ctx.sampleRate:Q.rate,proc:Q.proc}));
+  const wantsOpus=transport.value==='auto'&&Q.bitrate>0&&typeof AudioEncoder==='function'&&typeof AudioData==='function';
+  audioCodec=wantsOpus?'opus':'pcm';audioFraming=wantsOpus?'bare':'pcm';audioCaps=null;
+  const negotiate=(request,allowLegacy=false)=>new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{if(capabilityWait?.id===request.id){capabilityWait=null;reject(Error('Audio negotiation timed out'))}},3000);
+    capabilityWait={id:request.id,allowLegacy,timer,resolve,reject};socket.send(JSON.stringify(request));
+  });
+  try{
+    if(wantsOpus){
+      const caps=await negotiate({audio_v:3,id:++audioNegotiationId,codec:'opus',framing:'bare',rate:48000,bitrate:Q.bitrate,proc:Q.proc});
+      if(caps.error||caps.codec!=='opus')throw Error(caps.error||'Audio codec was not accepted');
+      if(caps.framing!=='bare')throw Error('Compact Opus framing was not accepted');
+    }else socket.send(JSON.stringify({audio_v:2,id:++audioNegotiationId,codec:'pcm',rate:Q.rate,proc:Q.proc}));
+  }catch(error){
+    if(!wantsOpus){if(ws===socket)socket.close();return false;}
+    try{
+      audioCodec='pcm';audioFraming='pcm';
+      socket.send(JSON.stringify({audio_v:2,id:++audioNegotiationId,codec:'pcm',rate:Q.rate,proc:Q.proc}));
+    }catch(fallbackError){
+      diagnostic('audio-negotiation-failed',debugError(fallbackError));if(ws===socket)socket.close();return false;
+    }
+  }
+  if(ws!==socket||socket.readyState!==1)return false;
   ready=true; reconnectDelay=1000;lastMessageAt=Date.now();connecting=false; talk.classList.remove('busy');
   if(!starting&&!capturing&&!talking) say('Ready — touch to record');
   diagnostic('connection-ready');flushDebug();paint();return true;
 }
 async function prepareAudio(){
-  if(node&&ctx) return;
+  if(node&&ctx){if(audioCodec==='opus'&&!opusEncoder)await setupOpus();return;}
   if(audioInit) return audioInit;
-  const audio=ctx=new AudioContext({sampleRate:quality().rate,latencyHint:'interactive'});
+  if(audioCodec==='opus'&&!await setupOpus()) audioCodec='pcm';
+  const audio=ctx=new AudioContext({sampleRate:audioCodec==='opus'?48000:quality().rate,latencyHint:'interactive'});
   const init=(async()=>{
     CHUNK=Math.max(128,Math.round(audio.sampleRate/100));
     const mod=`class P extends AudioWorkletProcessor{
-      process(i){const c=i[0][0]; if(c){const n=new Int16Array(c.length);
+      process(i){const c=i[0][0]; if(c){const n=new Float32Array(c.length);
         let p=0; for(let k=0;k<c.length;k++){const v=Math.max(-1,Math.min(1,c[k]));
-        n[k]=v<0?v*32768:v*32767; if(Math.abs(v)>p)p=Math.abs(v);}
-        this.port.postMessage({b:n.buffer,p},[n.buffer]);} return true}}
+        n[k]=v; if(Math.abs(v)>p)p=Math.abs(v);}
+        this.port.postMessage({b:n.buffer,p,f:1},[n.buffer]);} return true}}
       registerProcessor('p',P)`;
     const url=URL.createObjectURL(new Blob([mod],{type:'text/javascript'}));
     try{await audio.audioWorklet.addModule(url)}finally{URL.revokeObjectURL(url)}
@@ -756,30 +862,152 @@ async function prepareAudio(){
 }
 let pend=[],pendN=0,CHUNK=480;
 
+// The selector stores kbps for the wire/profile; WebCodecs requires bits per second.
+const opusConfig=()=>({codec:'opus',sampleRate:48000,numberOfChannels:1,bitrate:quality().bitrate*1000,
+  opus:{format:'opus',application:'voip',signal:'voice',frameDuration:20000,complexity:5,
+    packetlossperc:0,useinbandfec:false,usedtx:false}});
+async function setupOpus(){
+  if(audioCodec!=='opus'||opusEncoder)return true;
+  if(typeof AudioEncoder!=='function'||typeof AudioData!=='function')return false;
+  try{
+    const config=opusConfig(),support=await AudioEncoder.isConfigSupported(config);
+    if(!support?.supported)throw Error('Opus encoding is not supported by this browser');
+    opusFailed=false;
+    const encoder=new AudioEncoder({output:onOpusOutput,error:error=>{
+      opusFailed=true;diagnostic('opus-error',debugError(error));
+    }});
+    encoder.configure(support.config||config);opusEncoder=encoder;
+    return true;
+  }catch(error){
+    try{opusEncoder&&opusEncoder.close()}catch{} opusEncoder=null;
+    diagnostic('opus-unavailable',debugError(error));audioCodec='pcm';audioFraming='pcm';
+    if(ws?.readyState===1)ws.send(JSON.stringify({audio_v:2,id:++audioNegotiationId,codec:'pcm',rate:quality().rate,proc:quality().proc}));
+    return false;
+  }
+}
+function onOpusOutput(chunk){
+  if(!opusStream||!opusReady||(!talking&&!opusEnding)||!ws||ws.readyState!==1)return;
+  const body=new Uint8Array(chunk.byteLength);chunk.copyTo(body);
+  let wire=body;
+  if(audioFraming!=='bare'){
+    const packet=new Uint8Array(12+body.byteLength);packet[0]=80;packet[1]=77;packet[2]=2;packet[3]=1;
+    new DataView(packet.buffer).setUint32(4,opusStream);new DataView(packet.buffer).setUint32(8,opusSeq++);
+    packet.set(body,12);wire=packet;
+  }else opusSeq++;
+  wireSent+=wire.byteLength;sent+=960*2;ws.send(wire.buffer);
+}
+function asFloat32(buffer,isFloat=false){
+  if(isFloat)return new Float32Array(buffer);
+  const source=new Int16Array(buffer),out=new Float32Array(source.length);
+  for(let i=0;i<source.length;i++)out[i]=source[i]/32768;return out;
+}
+function encodeOpusFrame(){
+  const frame=new Float32Array(960),take=Math.min(960,opusPendingN);let offset=0;
+  while(offset<take){const head=opusPending[0],n=Math.min(head.length,take-offset);
+    frame.set(head.subarray(0,n),offset);offset+=n;
+    if(n===head.length)opusPending.shift();else opusPending[0]=head.slice(n);
+  }
+  opusPendingN-=take;
+  const audio=new AudioData({format:'f32-planar',sampleRate:48000,numberOfFrames:960,
+    numberOfChannels:1,timestamp:opusTimestamp,data:frame.buffer});
+  opusTimestamp+=20000;
+  try{opusEncoder.encode(audio)}catch(error){opusFailed=true;diagnostic('opus-error',debugError(error));}
+  finally{audio.close()}
+}
+function encodeOpusPending(pad=false){
+  if(!opusEncoder||opusFailed||!opusReady)return;
+  while(opusPendingN>=960||(pad&&opusPendingN>0)){
+    if(!pad&&opusEncoder.encodeQueueSize>=5)break;
+    if(!pad&&ws?.bufferedAmount>128*1024){diagnostic('audio-backpressure',{buffered_bytes:ws.bufferedAmount});break;}
+    encodeOpusFrame();
+  }
+}
+function waitForEncoderSlot(deadline){
+  return new Promise((resolve,reject)=>{
+    const check=()=>{
+      if(opusFailed)return reject(Error('Opus encoder failed'));
+      if(!opusEncoder||Date.now()>=deadline)return reject(Error('Opus encoder did not drain'));
+      if(opusEncoder.encodeQueueSize<5)return resolve();
+      setTimeout(check,20);
+    };
+    check();
+  });
+}
+async function drainOpusPending(){
+  const deadline=Date.now()+3000;
+  while(opusPendingN>0){
+    if(!opusEncoder||opusFailed)throw Error('Opus encoder failed');
+    if(opusEncoder.encodeQueueSize>=5)await waitForEncoderSlot(deadline);
+    if(ws?.bufferedAmount>128*1024)throw Error('Audio output buffer is full');
+    encodeOpusFrame();
+  }
+}
+async function startOpus(){
+  opusStream++;opusSeq=0;opusTimestamp=0;opusEnding=false;
+  opusReady=false;
+  if(ws?.readyState!==1)throw Error('Computer disconnected before audio start');
+  const streamId=opusStream;
+  await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{if(audioReadyWait?.stream===streamId){audioReadyWait=null;reject(Error('Audio start timed out'))}},3000);
+    audioReadyWait={stream:streamId,timer,resolve,reject};
+    ws.send(JSON.stringify({audio_start:{stream:streamId,rate:48000,framing:audioFraming}}));
+  });
+  opusReady=true;
+}
+async function finishOpus(){
+  if(!opusEncoder)return true;
+  opusEnding=true;
+  try{
+    await drainOpusPending();
+    await Promise.race([opusEncoder.flush(),new Promise((_,reject)=>setTimeout(()=>reject(Error('Opus encoder flush timed out')),3000))]);
+    const streamId=opusStream;
+    if(ws?.readyState!==1)throw Error('Computer disconnected before audio completion');
+    await new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>{if(audioEndWait?.stream===streamId){audioEndWait=null;reject(Error('Audio completion timed out'))}},3000);
+      audioEndWait={stream:streamId,timer,resolve,reject};
+      ws.send(JSON.stringify({audio_end:{stream:streamId,lastSeq:opusSeq-1,packetCount:opusSeq}}));
+    });
+    return true;
+  }catch(error){diagnostic('opus-error',debugError(error));return false}
+  finally{try{opusEncoder.close()}catch{} opusEncoder=null;opusEnding=false;opusReady=false;}
+}
+
 function flushAudio(){
   if(!pendN||!ws||ws.readyState!==1) return;
   const out=new Int16Array(pendN); let offset=0;
   for(const a of pend){out.set(a,offset);offset+=a.length;}
-  pend=[]; pendN=0; sent+=out.byteLength;
+  pend=[]; pendN=0; sent+=out.byteLength;wireSent+=out.byteLength;
   for(let i=0;i<out.length;i+=32000)ws.send(out.slice(i,i+32000).buffer);
 }
 function captureChunk(data){
   if(!capturing) return;
   push(data.p,talking);
-  pend.push(new Int16Array(data.b)); pendN+=data.b.byteLength/2;
-  if(!talking&&pendN>ctx.sampleRate*12){
+  if(audioCodec==='opus'){
+    const samples=asFloat32(data.b,data.f===1);opusPending.push(samples);opusPendingN+=samples.length;
+    if(talking)encodeOpusPending();
+  }else{
+    const pcm=data.f===1?new Int16Array(asFloat32(data.b,true).length):new Int16Array(data.b);
+    if(data.f===1){const source=new Float32Array(data.b);for(let i=0;i<source.length;i++){const v=Math.max(-1,Math.min(1,source[i]));pcm[i]=v<0?v*32768:v*32767;}}
+    pend.push(pcm);pendN+=pcm.length;
+    if(talking&&pendN>=CHUNK)flushAudio();
+  }
+  const buffered=audioCodec==='opus'?opusPendingN:pendN;
+  if(talking&&audioCodec==='opus'&&buffered>48000*2){
+    diagnostic('audio-backpressure',{queued_samples:buffered});say('Network is too slow — stopping safely','warn');end();return;
+  }
+  if(!talking&&buffered>ctx.sampleRate*12){
     diagnostic('startup-buffer-full');micOff();
     if(dictationWait){const pending=dictationWait;dictationWait=null;pending.reject(Error('Laptop dictation took too long to start. Try again.'));}
     say('Laptop dictation took too long to start. Try again.','warn');return;
   }
-  if(talking&&pendN>=CHUNK) flushAudio();
 }
 // Request the microphone directly from touch-down, before any network wait.
 async function micOn(){
   const Q=quality(), my=++gen;
+  const captureRate=audioCodec==='opus'?48000:Q.rate;
   const request=navigator.mediaDevices.getUserMedia({audio:{
     echoCancellation:Q.proc,noiseSuppression:Q.proc,autoGainControl:Q.proc,
-    channelCount:1,sampleRate:Q.rate}});
+    channelCount:1,sampleRate:captureRate}});
   const [phone,graph]=await Promise.allSettled([request,prepareAudio()]);
   if(phone.status==='rejected') throw phone.reason;
   const acquired=phone.value;
@@ -800,7 +1028,7 @@ function micOff(keepAudio=false){
   try{ src&&src.disconnect(); }catch(e){} src=null;
   try{ stream&&stream.getTracks().forEach(t=>t.stop()); }catch(e){} stream=null;
   try{ ctx&&ctx.state==='running'&&ctx.suspend(); }catch(e){}
-  if(!keepAudio){pend=[]; pendN=0;}
+  if(!keepAudio){pend=[]; pendN=0;opusPending=[];opusPendingN=0;}
 }
 async function begin(){
   if(talking||starting||(remoteBusy&&remoteBusy!=='list')) return;
@@ -808,10 +1036,10 @@ async function begin(){
   let remoteStarted=false;
   try{
     say('Opening microphone…');
+    if((!ready||!ws||ws.readyState!==1) && !await connect())
+      throw new Error('Could not reach the computer');
     const phone=micOn();
     const remote=(async()=>{
-      if((!ready||!ws||ws.readyState!==1) && !await connect())
-        throw new Error('Could not reach the computer');
       if(dictation.checked){
         await dictationCommand('start'); remoteStarted=true;
       }
@@ -819,17 +1047,19 @@ async function begin(){
     const [phoneResult,remoteResult]=await Promise.allSettled([phone,remote]);
     if(remoteResult.status==='rejected') throw remoteResult.reason;
     if(phoneResult.status==='rejected') throw phoneResult.reason;
-    if(!phoneResult.value||(!pressed&&!pendN)){
+    if(!phoneResult.value||(!pressed&&!(pendN||opusPendingN))){
       micOff();
       if(remoteStarted) await dictationCommand('abort');
       say('Ready — the mic is off');
       return;
     }
-    talking=true;flushAudio();diagnostic('recording-streaming');
+    talking=true;
+    if(audioCodec==='opus')await startOpus();
+    if(audioCodec==='opus')encodeOpusPending();else flushAudio();diagnostic('recording-streaming');
     say(dictation.checked?'Dictating to laptop':'Live','live');
     if(!pressed){starting=false;end();}
   }catch(e){
-    diagnostic('recording-error',debugError(e));micOff();
+    diagnostic('recording-error',debugError(e));talking=false;micOff();
     if(remoteStarted) await dictationCommand('abort').catch(()=>{});
     say(e.message||'Could not start recording','warn');
   }finally{ starting=Boolean(dictationWait); paint(); }
@@ -849,17 +1079,24 @@ function dictationCommand(action){
     ws.send(JSON.stringify({id,dictation:action}));
   });
 }
-function end(){
-  diagnostic('recording-release');
-  if(starting){ micOff(true); paint(); return; }
-  if(!talking) return;
-  flushAudio();
-  talking=false; micOff(); paint(); say('Ready — the mic is off');
-  if(dictation.checked){
-    starting=true; paint(); say('Sending to laptop dictation…');
-    dictationCommand('stop').then(()=>say('Sent to laptop for transcription'))
-      .catch(e=>say(e.message,'warn')).finally(()=>{starting=false;paint();});
-  }
+async function end(){
+  if(endingPromise)return endingPromise;
+  endingPromise=(async()=>{
+    diagnostic('recording-release');
+    if(starting){ micOff(true); paint(); return; }
+    if(!talking) return;
+    let audioComplete=true;
+    if(audioCodec==='opus'){
+      micOff(true);audioComplete=await finishOpus();
+    }else flushAudio();
+    talking=false; micOff(); paint(); say('Ready — the mic is off');
+    if(dictation.checked&&audioComplete){
+      starting=true; paint(); say('Sending to laptop dictation…');
+      dictationCommand('stop').then(()=>say('Sent to laptop for transcription'))
+        .catch(e=>say(e.message,'warn')).finally(()=>{starting=false;paint();});
+    }else if(dictation.checked) say('Audio did not reach the laptop','warn');
+  })();
+  try{return await endingPromise}finally{endingPromise=null;}
 }
 function teardown(msg,c){
   diagnostic('connection-teardown');flushDebug();
@@ -872,6 +1109,10 @@ function teardown(msg,c){
   herdrPending.clear();
   for(const pending of desktopPending.values()){clearTimeout(pending.timer);pending.reject(new Error('Computer disconnected'));}
   desktopPending.clear();
+  try{opusEncoder&&opusEncoder.close()}catch(e){} opusEncoder=null;opusEnding=false;opusReady=false;opusStream=0;
+  if(capabilityWait){clearTimeout(capabilityWait.timer);const pending=capabilityWait;capabilityWait=null;pending.reject(Error('Computer disconnected'));}
+  if(audioReadyWait){clearTimeout(audioReadyWait.timer);const pending=audioReadyWait;audioReadyWait=null;pending.reject(Error('Computer disconnected'));}
+  if(audioEndWait){clearTimeout(audioEndWait.timer);const pending=audioEndWait;audioEndWait=null;pending.reject(Error('Computer disconnected'));}
   const oldSocket=ws; ws=null;
   try{oldSocket&&oldSocket.close()}catch(e){} try{ctx&&ctx.close()}catch(e){}
   ctx=null; node=null;
@@ -946,8 +1187,9 @@ function paintRemote(){
   $('insert-text').disabled=busy||!activeDesktop?.id||(activeDesktop.herdr&&!paneSelect.value);
   $('new-workspace').disabled=$('save-workspace').disabled=busy;
   for(const button of [...remoteButtons,...document.querySelectorAll('#command-buttons button')]){
+    if(!button)continue;
     button.disabled=busy||!activeDesktop?.id||(activeDesktop.herdr&&!paneSelect.value);
-    if(button.dataset.mod) button.setAttribute('aria-pressed',String(modifiers.has(button.dataset.mod)));
+    if(button.dataset?.mod) button.setAttribute('aria-pressed',String(modifiers.has(button.dataset.mod)));
   }
 }
 async function herdrCommand(command){
@@ -1412,6 +1654,8 @@ dictation.onchange=()=>{
 };
 q.onchange=()=>{ try{localStorage.setItem('pm.q',q.value)}catch(e){}
   if(ready) teardown('Quality changed — hold to reconnect'); };
+transport.onchange=()=>{ try{localStorage.setItem('pm.transport',transport.value)}catch(e){}
+  if(ready) teardown('Transport changed — hold to reconnect'); };
 dis.onclick=()=>{manualDisconnect=true;clearTimeout(reconnectTimer);reconnectTimer=null;teardown('Disconnected');};
 
 // Keep the screen awake only while actually streaming.
@@ -1611,7 +1855,7 @@ PAIR_REQUEST_BUDGET = Budget(0.5, 10)
 
 
 DEBUG_BUDGET = Budget(10,40)
-DEBUG_EVENTS = set('page-loaded javascript-error unhandled-rejection connection-opening connection-ready connection-closed connection-error connection-teardown microphone-acquired audio-running recording-request recording-streaming recording-progress recording-release recording-error startup-buffer-full dictation-request dictation-ready dictation-error dictation-timeout visibility desktop-request desktop-ready desktop-error control-request control-error'.split())
+DEBUG_EVENTS = set('page-loaded javascript-error unhandled-rejection connection-opening connection-ready connection-closed connection-error connection-teardown microphone-acquired audio-running recording-request recording-streaming recording-progress recording-release recording-error startup-buffer-full audio-backpressure audio-negotiation-failed opus-error opus-unavailable dictation-request dictation-ready dictation-error dictation-timeout visibility desktop-request desktop-ready desktop-error control-request control-error'.split())
 
 def receive_diagnostics(request):
     raw=request.headers.get('X-PhoneMic-Diagnostics','')
@@ -1623,7 +1867,7 @@ def receive_diagnostics(request):
     numbers={'seq','time_ms','request_id','socket','code','queued_samples','buffered_bytes','sent_bytes','received_bytes','line','column'}
     flags={'ready','starting','talking','capturing','hidden','online','dictation'}
     enums={'action':{'start','stop','abort','unknown','key','text','command','focus','list','scroll','split','close','workspace','read'},'audio_state':{'none','running','suspended','closed','interrupted'},
-           'app_mode':{'herdr','generic','none'},'error':{'Error','TypeError','ReferenceError','SyntaxError','RangeError','DOMException','NotAllowedError','NotFoundError','NotReadableError','AbortError','InvalidStateError'}}
+           'app_mode':{'herdr','generic','none'},'error':{'Error','TypeError','ReferenceError','SyntaxError','RangeError','DOMException','NotAllowedError','NotFoundError','NotReadableError','NotSupportedError','AbortError','InvalidStateError'}}
     for entry in events:
         if not isinstance(entry,dict) or not isinstance(entry.get('event'),str) or entry['event'] not in DEBUG_EVENTS:continue
         clean={'event':entry['event']}
@@ -2105,6 +2349,12 @@ async def handle_authenticated(ws):
     print("paired browser connected", flush=True)
     ff = spawn_sink(RATE)
     rate = RATE
+    codec = 'pcm'
+    framing = 'pcm'
+    audio_version = 2
+    decoder = None
+    active_stream = None
+    expected_seq = 0
     dictation = Dictation()
     herdr = Herdr()
     state = {"n": 0}
@@ -2138,6 +2388,74 @@ async def handle_authenticated(ws):
                 if not budget.take():
                     kind = 'mouse' if 'mouse' in cfg else 'desktop' if 'desktop' in cfg else 'herdr' if 'herdr' in cfg else 'dictation'
                     await ws.send(json.dumps({'type':kind,'id':cfg.get('id'),'error':'Input is arriving too quickly. Try again.'}))
+                    continue
+                if cfg.get('audio_v') in (2, 3) or 'audio_codec' in cfg:
+                    requested = cfg.get('audio_codec', cfg.get('codec', 'pcm'))
+                    if requested not in ('opus', 'pcm'):
+                        await ws.send(json.dumps({'type':'audio-capabilities','v':2,'id':cfg.get('id'),'codec':'pcm','framing':'pcm','error':'Unsupported audio codec'}))
+                        continue
+                    if active_stream is not None:
+                        await ws.send(json.dumps({'type':'audio-capabilities','v':audio_version,'id':cfg.get('id'),'codec':codec,'framing':framing,'error':'Audio stream is active'}))
+                        continue
+                    requested_version = cfg.get('audio_v', 2)
+                    requested_framing = cfg.get('framing', 'bare' if requested_version == 3 else 'header')
+                    if requested_framing not in ('bare', 'header', 'pcm'):
+                        await ws.send(json.dumps({'type':'audio-capabilities','v':2,'id':cfg.get('id'),'codec':'pcm','framing':'pcm','error':'Unsupported audio framing'}))
+                        continue
+                    if decoder:
+                        decoder.close();decoder=None
+                    selected_codec = 'opus' if requested == 'opus' and opus_library() else 'pcm'
+                    r = cfg.get('rate', rate)
+                    if selected_codec == 'opus' and requested_framing in ('bare', 'header'):
+                        selected_rate = 48000
+                        selected_framing = 'bare' if requested_version == 3 and requested_framing == 'bare' else 'header'
+                        selected_version = 3 if selected_framing == 'bare' else 2
+                    elif type(r) is int and 8000 <= r <= 48000:
+                        selected_codec = 'pcm'
+                        selected_rate = r
+                        selected_framing = 'pcm'
+                        selected_version = 2
+                    else:
+                        await ws.send(json.dumps({'type':'audio-capabilities','v':2,'id':cfg.get('id'),'codec':'pcm','framing':'pcm','error':'Invalid sample rate'}))
+                        continue
+                    codec,rate,framing,audio_version=selected_codec,selected_rate,selected_framing,selected_version
+                    stop_proc(ff);ff=spawn_sink(rate)
+                    print(f"audio -> {codec}/{framing} ({rate} Hz)", flush=True)
+                    await ws.send(json.dumps({'type':'audio-capabilities','v':audio_version,'id':cfg.get('id'),'codec':codec,
+                                              'framing':framing,'rate':rate,'channels':1,
+                                              'packet_samples':960 if codec=='opus' else 0}))
+                    continue
+                if 'audio_start' in cfg:
+                    start = cfg['audio_start']
+                    stream = start.get('stream') if isinstance(start,dict) else None
+                    start_framing = start.get('framing') if isinstance(start,dict) else None
+                    start_rate = start.get('rate') if isinstance(start,dict) else None
+                    if (codec != 'opus' or active_stream is not None or type(stream) is not int
+                            or not 0 < stream <= 2**32-1 or start_framing != framing or start_rate != rate):
+                        await ws.send(json.dumps({'type':'audio-ready','v':audio_version,'stream':stream,'error':'Opus stream unavailable'}))
+                        continue
+                    try:
+                        next_decoder=OpusDecoder()
+                    except RuntimeError as error:
+                        await ws.send(json.dumps({'type':'audio-ready','v':audio_version,'stream':stream,'error':str(error)}))
+                        continue
+                    decoder=next_decoder;active_stream=stream;expected_seq=0
+                    await ws.send(json.dumps({'type':'audio-ready','v':audio_version,'stream':stream,'codec':'opus','framing':framing}))
+                    continue
+                if 'audio_end' in cfg:
+                    end = cfg['audio_end']
+                    stream = end.get('stream') if isinstance(end,dict) else None
+                    last_seq = end.get('lastSeq') if isinstance(end,dict) else None
+                    packet_count = end.get('packetCount') if isinstance(end,dict) else None
+                    if (codec != 'opus' or stream != active_stream or type(stream) is not int
+                            or type(last_seq) is not int or type(packet_count) is not int
+                            or last_seq != expected_seq-1 or packet_count != expected_seq):
+                        await ws.send(json.dumps({'type':'audio-ended','v':audio_version,'stream':stream,'error':'Invalid Opus stream completion'}))
+                        continue
+                    if decoder:
+                        decoder.close();decoder=None
+                    active_stream=None
+                    await ws.send(json.dumps({'type':'audio-ended','v':audio_version,'stream':stream}))
                     continue
                 if "desktop" in cfg:
                     try:
@@ -2222,14 +2540,43 @@ async def handle_authenticated(ws):
                     print(f"rate -> {rate} Hz", flush=True)
                 continue
             if isinstance(msg, bytes) and ff.stdin:
-                if len(msg) % 2 or not audio.take(len(msg)):
-                    await ws.close(1008, "Audio rate limit exceeded")
-                    break
+                if codec == 'opus':
+                    if framing == 'bare':
+                        if not 1 <= len(msg) <= 1275:
+                            await ws.close(1008, "Invalid Opus frame size")
+                            break
+                        stream = active_stream
+                        sequence = expected_seq
+                        payload = msg
+                    else:
+                        if len(msg) < 13 or len(msg) > 12+1275 or msg[:3] != b'PM\x02' or msg[3] != 1:
+                            await ws.close(1008, "Invalid Opus frame")
+                            break
+                        stream = int.from_bytes(msg[4:8], 'big')
+                        sequence = int.from_bytes(msg[8:12], 'big')
+                        payload = msg[12:]
+                    if decoder is None or stream != active_stream or sequence != expected_seq:
+                        await ws.close(1008, "Unexpected Opus frame")
+                        break
+                    try:
+                        pcm, samples = decoder.decode(payload)
+                    except RuntimeError as error:
+                        await ws.close(1008, str(error))
+                        break
+                    if not audio.take(len(pcm)):
+                        await ws.close(1008, "Audio rate limit exceeded")
+                        break
+                    expected_seq += 1
+                else:
+                    if len(msg) % 2 or not audio.take(len(msg)):
+                        await ws.close(1008, "Audio rate limit exceeded")
+                        break
+                    pcm, samples = msg, len(msg)//2
                 # Unflushed, Python holds ~8 KB before writing -- about 170 ms
                 # of delay at these rates, for nothing.
-                playback_until = max(time.monotonic(), playback_until) + len(msg)/2/rate
-                await asyncio.to_thread(write_audio, ff, msg)
-                state["n"] += len(msg)
+                playback_until = max(time.monotonic(), playback_until) + samples/rate
+                await asyncio.to_thread(write_audio, ff, pcm)
+                state["n"] += len(pcm)
     except Exception as e:
         print(f"stream ended ({type(e).__name__})", flush=True)
     finally:
@@ -2242,6 +2589,8 @@ async def handle_authenticated(ws):
         guard.cancel()
         await asyncio.gather(task, herdr_task, desktop_task, guard, return_exceptions=True)
         await dictation.close()
+        if decoder:
+            decoder.close()
         stop_proc(ff)
         print(f"connection closed (code={ws.close_code if hasattr(ws, 'close_code') else None})", flush=True)
         print(f"phone disconnected after {time.time()-t0:.0f}s "

@@ -193,16 +193,17 @@ function browser(store = {}) {
       micOn=actualMicOn;
       connect=()=>new Promise(r=>connected=()=>{ready=true;ws={readyState:1,send(b){packets.push(Array.from(new Int16Array(b)))}};r(true)});`);
     const pending=run('begin()');
-    assert.equal(run('requested'), true);
+    assert.equal(run('requested'), false);
+    run('connected()');
     await new Promise(setImmediate);
+    assert.equal(run('requested'), true);
     assert.equal(run('capturing'), true);
     run('node.port.onmessage({data:{b:new Int16Array([123,456]).buffer,p:0.1}})');
     assert.equal(run('pendN'), 2);
     assert.equal(run('packets.length'), 0);
     run('pressed=false; end()');
     assert.equal(run('capturing'), false);
-    assert.equal(run('pendN'), 2);
-    run('connected()');
+    assert.equal(run('pendN'), 0);
     await pending;
     await new Promise(setImmediate);
     assert.equal(run('packets[0].join(",")'), '123,456');
@@ -265,7 +266,7 @@ function browser(store = {}) {
   {
     const run=browser();
     run("paneSelect.value='w1:p1';paintRemote();var commandSent=[];remoteAction=c=>commandSent.push(c)");
-    assert.equal(run("$('command-buttons').children.length"),4);
+    assert.equal(run("$('command-buttons').children.length"),5);
     run("$('command-buttons').children[0].onclick()");
     assert.equal(run('JSON.stringify(commandSent)'), '[{"action":"command","pane":"w1:p1","text":"/clear"}]');
     run("$('add-command').onclick();$('custom-command').value='my-command';$('save-command').onsubmit({preventDefault(){}})");
