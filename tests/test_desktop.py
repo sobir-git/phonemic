@@ -22,6 +22,31 @@ class DesktopTests(unittest.IsolatedAsyncioTestCase):
             await webmic.desktop_control({'action':'list'})
             snapshot.assert_awaited_once()
 
+    async def test_list_is_metadata_first_and_preview_is_targeted(self):
+        metadata={'windows':[{'id':'123','active':True,'app':'Test'}],'previewSupported':True}
+        async def snapshot(*, previews=False, context=False, window_id=None):
+            if window_id is not None:
+                return {'window':window_id,'preview':'encoded-preview'}
+            self.assertFalse(previews);self.assertFalse(context)
+            return metadata
+        with patch.object(webmic,'DESKTOP_CACHE',None), patch.object(webmic,'DESKTOP_UPDATED',0), \
+             patch.object(webmic,'DESKTOP_SNAPSHOT',''), patch.object(webmic,'DESKTOP_PREVIEW_CACHE',webmic.OrderedDict()), \
+             patch.object(webmic,'desktop_snapshot',side_effect=snapshot) as run:
+            listing=await webmic.desktop_control({'action':'list'})
+            self.assertTrue(listing['snapshot'])
+            self.assertNotIn('preview', listing['windows'][0])
+            result=await webmic.desktop_control({'action':'preview','window':'123','snapshot':listing['snapshot']})
+            self.assertEqual(result['preview'],'encoded-preview')
+            self.assertEqual(run.await_count,2)
+            with self.assertRaises(RuntimeError):
+                await webmic.desktop_control({'action':'preview','window':'123','snapshot':'stale'})
+
+    async def test_active_context_uses_targeted_context_lookup(self):
+        with patch.object(webmic,'desktop_snapshot',AsyncMock(return_value={'id':'123','app':'Editor','herdr':False,'width':800,'height':600})) as snapshot:
+            result=await webmic.desktop_context(fresh=True)
+            self.assertEqual(result['id'],'123')
+            snapshot.assert_awaited_once_with(context=True)
+
     async def test_input_routes_to_generic_app_and_not_herdr(self):
         herdr=AsyncMock()
         with patch.object(webmic,'require_desktop',AsyncMock(return_value={'id':'123','herdr':False})), patch.object(webmic,'generic_input',AsyncMock(return_value={})) as generic:

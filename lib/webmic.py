@@ -11,8 +11,9 @@ Serve plain HTTP behind a TLS-terminating proxy (Cloudflare Tunnel), or supply
 PM_CERT/PM_KEY to serve HTTPS directly. getUserMedia requires a secure context
 either way.
 """
-import asyncio, ctypes, ctypes.util, json, os, pathlib, ssl, subprocess, sys, signal, time
+import asyncio, ctypes, ctypes.util, json, os, pathlib, secrets, ssl, subprocess, sys, signal, time
 from contextlib import AsyncExitStack
+from collections import OrderedDict
 import base64, hashlib, re
 from http.cookies import SimpleCookie
 from urllib.parse import urlsplit
@@ -381,7 +382,8 @@ color:var(--fg);border-radius:10px;font:600 .82rem system-ui;touch-action:manipu
 #apps-dialog::backdrop{background:#000c}
 .apps-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .apps-head h2{font-size:1.05rem;margin:0}
-#apps-close{padding:10px 14px;background:var(--bg);color:var(--fg);border:1px solid var(--edge);border-radius:10px}
+#apps-previews,#apps-close{padding:10px 14px;background:var(--bg);color:var(--fg);border:1px solid var(--edge);border-radius:10px}
+#apps-previews[aria-pressed=false]{color:var(--dim)}
 #apps-status{font-size:.78rem;color:var(--dim);margin:12px 0}
 #apps-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .app-card{min-width:0;text-align:left;background:var(--bg);color:var(--fg);border:1px solid var(--edge);border-radius:12px;padding:8px;touch-action:manipulation}
@@ -548,7 +550,7 @@ box-shadow:0 0 0 5px #19F0A62E;transform:translateY(1px)}
 
 
 <dialog id=apps-dialog aria-labelledby=apps-heading>
-<div class=apps-head><h2 id=apps-heading>Applications</h2><button id=apps-close aria-label="Close applications">Close</button></div>
+<div class=apps-head><h2 id=apps-heading>Applications</h2><div><button id=apps-previews aria-pressed=true>Previews</button><button id=apps-close aria-label="Close applications">Close</button></div></div>
 <p id=apps-status role=status>Loading windows…</p><div id=apps-grid></div>
 </dialog>
 <dialog id=output-dialog aria-label="Expanded terminal output"></dialog>
@@ -1241,9 +1243,12 @@ document.addEventListener('pointerdown',e=>{
   if(button&&!button.disabled&&button!==talk&&e.isPrimary!==false)haptic();
 },{passive:true});
 
-const appsDialog=$('apps-dialog'),appsGrid=$('apps-grid'),appsStatus=$('apps-status');
+const appsDialog=$('apps-dialog'),appsGrid=$('apps-grid'),appsStatus=$('apps-status'),appsPreviews=$('apps-previews');
 let activeDesktop=null;
 const desktopPending=new Map();let desktopSerial=0,appsTimer=null,appsBusy=false,appFocusBusy=false;
+let appsGeneration=0,appsInventory=null,appsPreviewObserver=null,appsPreviewQueue=[],appsPreviewRunning=false,appsPreviewsEnabled=true;
+try{appsPreviewsEnabled=localStorage.getItem('pm.apps.previews')!=='0';}catch{}
+appsPreviews.setAttribute('aria-pressed',String(appsPreviewsEnabled));
 function applyDesktopContext(context){
  const changed=activeDesktop?.id!==context?.id||activeDesktop?.herdr!==context?.herdr;
  activeDesktop=context;
@@ -1264,37 +1269,99 @@ async function desktopCommand(command){
   desktopPending.set(id,{resolve,reject,timer});ws.send(JSON.stringify({desktop:command,id}));
  });
 }
+function stopAppPreviewWork(){
+ clearTimeout(appsTimer);appsPreviewQueue=[];
+ if(appsPreviewObserver){appsPreviewObserver.disconnect();appsPreviewObserver=null;}
+ for(const card of appsGrid.children)if(card.dataset.previewState==='queued')card.dataset.previewState='idle';
+}
+function appCard(windowId){return Array.from(appsGrid.children).find(card=>card.dataset.window===windowId)||null;}
+function setAppPreview(card,encoded){
+ const old=card.querySelector('.app-preview');
+ const preview=encoded?document.createElement('img'):document.createElement('span');
+ preview.className='app-preview';preview.dataset.previewState=encoded?'ready':'unavailable';
+ if(encoded){preview.src='data:image/jpeg;base64,'+encoded;preview.alt='';preview.onerror=()=>{preview.replaceWith(Object.assign(document.createElement('span'),{className:'app-preview',textContent:'Preview unavailable'}));}}
+ else preview.textContent='Preview unavailable';
+ old?.replaceWith(preview);
+}
+function renderApps(result,generation){
+ if(generation!==appsGeneration||!appsDialog.open)return;
+ const retainedFocus=document.activeElement?.dataset?.window;
+ const existing=new Map(Array.from(appsGrid.children).map(card=>[card.dataset.window,card]));
+ const seen=new Set();
+ for(const w of result.windows||[]){
+  let card=existing.get(w.id);
+  if(!card){
+   card=document.createElement('button');card.className='app-card';card.dataset.window=w.id;card.dataset.previewState='idle';
+   const preview=document.createElement('span');preview.className='app-preview';
+   const name=document.createElement('span');name.className='app-name';
+   const title=document.createElement('span');title.className='app-title';
+   card.append(preview,name,title);card.onclick=()=>focusApp(card.dataset.window);
+  }
+  seen.add(w.id);card.setAttribute('aria-pressed',String(w.active));card.setAttribute('aria-label',w.app+': '+w.title);
+  card.querySelector('.app-name').textContent=w.app;card.querySelector('.app-title').textContent=w.title;
+  if(w.preview)setAppPreview(card,w.preview);
+  else if(!appsPreviewsEnabled||result.previewSupported===false){setAppPreview(card,null);card.dataset.previewState='disabled';}
+  else if(card.dataset.previewState!=='ready'&&card.dataset.previewState!=='queued'&&card.dataset.previewState!=='loading'){
+   const preview=card.querySelector('.app-preview');preview.textContent='Preview loading…';preview.dataset.previewState='idle';card.dataset.previewState='idle';
+  }
+  appsGrid.append(card);if(retainedFocus===w.id)card.focus();
+ }
+ for(const card of existing.values())if(!seen.has(card.dataset.window))card.remove();
+ if(retainedFocus&&!appCard(retainedFocus))appsGrid.querySelector('button')?.focus();
+}
+function queueAppPreview(windowId,generation){
+ if(!appsPreviewsEnabled||generation!==appsGeneration||!appsInventory?.previewSupported||!appCard(windowId))return;
+ const card=appCard(windowId);if(['queued','loading','ready','disabled'].includes(card.dataset.previewState))return;
+ card.dataset.previewState='queued';appsPreviewQueue.push({windowId,generation});drainAppPreviews();
+}
+async function drainAppPreviews(){
+ if(appsPreviewRunning)return;appsPreviewRunning=true;
+ try{while(appsPreviewQueue.length){
+  const job=appsPreviewQueue.shift(),card=appCard(job.windowId);
+  if(!card||job.generation!==appsGeneration||!appsDialog.open||document.hidden||!appsPreviewsEnabled)continue;
+  card.dataset.previewState='loading';
+  try{const result=await desktopCommand({action:'preview',window:job.windowId,snapshot:appsInventory.snapshot});
+   if(job.generation!==appsGeneration||!appsDialog.open||result.snapshot!==appsInventory?.snapshot)continue;
+   setAppPreview(card,result.preview);card.dataset.previewState=result.preview?'ready':'unavailable';
+  }catch(error){if(job.generation===appsGeneration&&appCard(job.windowId)){card.dataset.previewState='unavailable';setAppPreview(card,null);}}
+ }}finally{appsPreviewRunning=false;}
+}
+function watchAppPreviews(generation){
+ if(!appsPreviewsEnabled||!appsInventory?.previewSupported)return;
+ if(typeof IntersectionObserver==='function'){
+  appsPreviewObserver=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting)queueAppPreview(entry.target.dataset.window,generation);},{root:appsDialog,rootMargin:'80px'});
+  for(const card of appsGrid.children)appsPreviewObserver.observe(card);
+ }else for(const card of Array.from(appsGrid.children).slice(0,4))queueAppPreview(card.dataset.window,generation);
+}
+async function focusApp(windowId){
+ if(appFocusBusy)return;appFocusBusy=true;const generation=++appsGeneration;stopAppPreviewWork();appsStatus.textContent='Switching…';
+ try{const selected=await desktopCommand({action:'focus',window:windowId});
+  if(generation!==appsGeneration||!appsDialog.open)return;
+  if(selected.context)applyDesktopContext(selected.context);
+  const focused=selected.context?.id||windowId;for(const button of appsGrid.children)button.setAttribute('aria-pressed',String(button.dataset.window===focused));
+  appsInventory=null;appsStatus.textContent='Window focused.';
+ }catch(error){if(generation===appsGeneration&&appsDialog.open)appsStatus.textContent=error.message;}
+ finally{if(generation===appsGeneration){appFocusBusy=false;if(appsDialog.open&&!document.hidden)appsTimer=setTimeout(()=>updateApps(),500);}}
+}
 async function updateApps(){
  clearTimeout(appsTimer);
  if(!appsDialog.open||document.hidden||appsBusy||appFocusBusy)return;
- appsBusy=true;
- try{
-  const result=await desktopCommand({action:'list'});
-  if(!appsDialog.open)return;
-  const retainedFocus=document.activeElement?.dataset?.window;
-  appsGrid.replaceChildren();
-  for(const w of result.windows){
-   const card=document.createElement('button');card.className='app-card';card.dataset.window=w.id;
-   card.setAttribute('aria-pressed',String(w.active));card.setAttribute('aria-label',w.app+': '+w.title);
-   const preview=document.createElement(w.preview?'img':'span');preview.className='app-preview';
-   if(w.preview){preview.src='data:image/jpeg;base64,'+w.preview;preview.alt='';}else preview.textContent='Preview unavailable';
-   const name=document.createElement('span');name.className='app-name';name.textContent=w.app;
-   const title=document.createElement('span');title.className='app-title';title.textContent=w.title;
-   card.append(preview,name,title);card.onclick=async()=>{
-    if(appFocusBusy)return;appFocusBusy=true;clearTimeout(appsTimer);appsStatus.textContent='Switching…';
-    try{const selected=await desktopCommand({action:'focus',window:w.id});if(selected.context)applyDesktopContext(selected.context);appsStatus.textContent='Window focused.';for(const button of appsGrid.children)button.setAttribute('aria-pressed',String(button.dataset.window===w.id));}
-    catch(e){appsStatus.textContent=e.message;}
-    finally{appFocusBusy=false;if(appsDialog.open)appsTimer=setTimeout(updateApps,3000);}
-   };appsGrid.append(card);if(retainedFocus===w.id)card.focus();
-  }
-  appsStatus.textContent=result.windows.length?'Tap a window to switch. Previews refresh every 3 seconds.':'No application windows found.';
- }catch(e){if(appsDialog.open)appsStatus.textContent=e.message;}
- finally{appsBusy=false;if(appsDialog.open&&!document.hidden)appsTimer=setTimeout(updateApps,3000);}
+ const generation=++appsGeneration;appsBusy=true;stopAppPreviewWork();
+ if(appsInventory){renderApps(appsInventory,generation);appsStatus.textContent='Updating applications…';}
+ else appsStatus.textContent='Loading applications…';
+ try{const result=await desktopCommand({action:'list'});
+  if(generation!==appsGeneration||!appsDialog.open)return;
+  appsInventory=result;renderApps(result,generation);
+  appsStatus.textContent=result.windows?.length?'Tap a window to switch.':'No application windows found.';
+  watchAppPreviews(generation);
+ }catch(error){if(generation===appsGeneration&&appsDialog.open)appsStatus.textContent=error.message;}
+ finally{if(generation===appsGeneration){appsBusy=false;if(appsDialog.open&&!document.hidden)appsTimer=setTimeout(()=>updateApps(),5000);}}
 }
-$('open-apps').onclick=()=>{appsDialog.showModal();updateApps();};
+appsPreviews.onclick=()=>{appsPreviewsEnabled=!appsPreviewsEnabled;appsPreviews.setAttribute('aria-pressed',String(appsPreviewsEnabled));try{localStorage.setItem('pm.apps.previews',appsPreviewsEnabled?'1':'0')}catch{};const generation=++appsGeneration;stopAppPreviewWork();if(appsInventory&&appsDialog.open){renderApps(appsInventory,generation);watchAppPreviews(generation);}};
+$('open-apps').onclick=()=>{appsDialog.showModal();if(appsInventory)renderApps(appsInventory,++appsGeneration);updateApps();};
 $('apps-close').onclick=()=>appsDialog.close();
-appsDialog.addEventListener('close',()=>{clearTimeout(appsTimer);appsGrid.replaceChildren();});
-document.addEventListener('visibilitychange',()=>{if(document.hidden)clearTimeout(appsTimer);else if(appsDialog.open)updateApps();});
+appsDialog.addEventListener('close',()=>{++appsGeneration;stopAppPreviewWork();appsBusy=false;appFocusBusy=false;});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){++appsGeneration;stopAppPreviewWork();appsBusy=false;}else if(appsDialog.open)updateApps();});
 
 const defaultCommands=['/clear','/model','cx','cc-yolo'];
 let savedCommands=[...defaultCommands];
@@ -2179,9 +2246,7 @@ async def desktop_context(fresh=False):
     async with CONTEXT_LOCK:
         if not fresh and CONTEXT_CACHE is not None and time.monotonic()-CONTEXT_UPDATED < .4:
             return CONTEXT_CACHE
-        inventory = await desktop_snapshot(previews=False)
-        active = next((w for w in inventory['windows'] if w['active']), None)
-        CONTEXT_CACHE = ({'id':active['id'],'app':active['app'],'herdr':bool(active.get('herdr')),'width':active.get('width',800),'height':active.get('height',600)} if active else {})
+        CONTEXT_CACHE = await desktop_snapshot(context=True)
         CONTEXT_UPDATED = time.monotonic()
         return CONTEXT_CACHE
 
@@ -2243,10 +2308,20 @@ async def generic_input(command, window):
 DESKTOP_LOCK = asyncio.Lock()
 DESKTOP_CACHE = None
 DESKTOP_UPDATED = 0.0
+DESKTOP_SNAPSHOT = ''
+DESKTOP_CACHE_LOCK = asyncio.Lock()
+DESKTOP_PREVIEW_LOCK = asyncio.Lock()
+DESKTOP_MUTATION_LOCK = asyncio.Lock()
+DESKTOP_PREVIEW_CACHE = OrderedDict()
+DESKTOP_PREVIEW_TTL = 15.0
 
-async def desktop_snapshot(previews=True):
+async def desktop_snapshot(previews=False, context=False, window_id=None):
     args = [sys.executable, str(pathlib.Path(__file__).with_name('desktop.py'))]
-    if not previews:
+    if context:
+        args.append('--context')
+    elif window_id is not None:
+        args.extend(['--preview', window_id])
+    elif not previews:
         args.append('--names')
     proc = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
     try:
@@ -2255,7 +2330,8 @@ async def desktop_snapshot(previews=True):
         if proc.returncode is None:
             proc.kill()
             await proc.wait()
-    if proc.returncode or len(out) > 3*1024*1024:
+    max_output = 32*1024 if window_id is not None else 3*1024*1024
+    if proc.returncode or len(out) > max_output:
         raise RuntimeError('Desktop windows are unavailable')
     result = json.loads(out)
     if result.get('error'):
@@ -2263,17 +2339,53 @@ async def desktop_snapshot(previews=True):
     return result
 
 async def desktop_control(command):
-    global DESKTOP_CACHE, DESKTOP_UPDATED
+    global DESKTOP_CACHE, DESKTOP_UPDATED, DESKTOP_SNAPSHOT
     if not isinstance(command, dict):
         raise RuntimeError('Invalid desktop command')
-    async with DESKTOP_LOCK:
-        if command.get('action') == 'list':
-            if DESKTOP_CACHE is None or time.monotonic()-DESKTOP_UPDATED >= 2.5:
-                DESKTOP_CACHE = await desktop_snapshot()
+    action = command.get('action')
+    if action == 'list':
+        async with DESKTOP_CACHE_LOCK:
+            if DESKTOP_CACHE is None or time.monotonic()-DESKTOP_UPDATED >= 1.0:
+                DESKTOP_CACHE = await desktop_snapshot(previews=False)
                 DESKTOP_UPDATED = time.monotonic()
-            return DESKTOP_CACHE
-        if command.get('action') != 'focus' or not isinstance(command.get('window'), str) or not re.fullmatch(r'[0-9]{1,10}', command['window']):
+                DESKTOP_SNAPSHOT = secrets.token_urlsafe(9)
+                DESKTOP_PREVIEW_CACHE.clear()
+            result = dict(DESKTOP_CACHE)
+            result['snapshot'] = DESKTOP_SNAPSHOT
+            return result
+    if action == 'preview':
+        window = command.get('window')
+        snapshot = command.get('snapshot')
+        if (not isinstance(window, str) or not re.fullmatch(r'[0-9]{1,10}', window) or
+                not isinstance(snapshot, str) or len(snapshot) > 32):
             raise RuntimeError('Invalid window selection')
+        async with DESKTOP_CACHE_LOCK:
+            if DESKTOP_CACHE is None or time.monotonic()-DESKTOP_UPDATED >= 1.0:
+                DESKTOP_CACHE = await desktop_snapshot(previews=False)
+                DESKTOP_UPDATED = time.monotonic()
+                DESKTOP_SNAPSHOT = secrets.token_urlsafe(9)
+                DESKTOP_PREVIEW_CACHE.clear()
+            if snapshot != DESKTOP_SNAPSHOT:
+                raise RuntimeError('Applications changed. Refresh the list.')
+            if window not in {item['id'] for item in DESKTOP_CACHE['windows']}:
+                raise RuntimeError('That window has closed. Refresh the list.')
+            cached = DESKTOP_PREVIEW_CACHE.get(window)
+            if cached and time.monotonic()-cached[0] < DESKTOP_PREVIEW_TTL:
+                DESKTOP_PREVIEW_CACHE.move_to_end(window)
+                return {'snapshot':snapshot,'window':window,'preview':cached[1]}
+        async with DESKTOP_PREVIEW_LOCK:
+            result = await desktop_snapshot(window_id=window)
+        preview = result.get('preview')
+        async with DESKTOP_CACHE_LOCK:
+            if snapshot == DESKTOP_SNAPSHOT:
+                DESKTOP_PREVIEW_CACHE[window] = (time.monotonic(), preview)
+                DESKTOP_PREVIEW_CACHE.move_to_end(window)
+                while len(DESKTOP_PREVIEW_CACHE) > 24:
+                    DESKTOP_PREVIEW_CACHE.popitem(last=False)
+        return {'snapshot':snapshot,'window':window,'preview':preview}
+    if action != 'focus' or not isinstance(command.get('window'), str) or not re.fullmatch(r'[0-9]{1,10}', command['window']):
+        raise RuntimeError('Invalid window selection')
+    async with DESKTOP_MUTATION_LOCK:
         inventory = await desktop_snapshot(previews=False)
         if command['window'] not in {w['id'] for w in inventory['windows']}:
             raise RuntimeError('That window has closed. Choose another window.')
@@ -2287,7 +2399,9 @@ async def desktop_control(command):
                 await proc.wait()
         if proc.returncode:
             raise RuntimeError('Could not focus that window')
-        DESKTOP_CACHE = None
+        async with DESKTOP_CACHE_LOCK:
+            DESKTOP_CACHE = None
+            DESKTOP_PREVIEW_CACHE.clear()
         return {'focused':command['window'],'context':await desktop_context(fresh=True)}
 
 
@@ -2366,8 +2480,25 @@ async def handle_authenticated(ws):
     controls, audio = Budget(40, 80), Budget(192000, 2*1024*1024)
     preview_task = None
     desktop_budget = Budget(1, 3)
+    preview_budget = Budget(2, 4)
+    desktop_tasks = set()
     pointer_budget = Budget(120, 240)
     t0 = time.time()
+
+    async def send_desktop_result(request_id, command):
+        try:
+            result = await desktop_control(command)
+            if AUTH.valid(*ws.phonemic_auth):
+                await ws.send(json.dumps({'type':'desktop','id':request_id,'result':result}))
+        except Exception as error:
+            if AUTH.valid(*ws.phonemic_auth):
+                message = str(error) if isinstance(error, RuntimeError) else 'Desktop windows unavailable'
+                await ws.send(json.dumps({'type':'desktop','id':request_id,'error':message}))
+
+    def remember_desktop_task(task):
+        desktop_tasks.add(task)
+        task.add_done_callback(desktop_tasks.discard)
+
     try:
         async for msg in ws:
             if isinstance(msg, str):
@@ -2464,20 +2595,15 @@ async def handle_authenticated(ws):
                             result = await route_desktop_input(command, herdr)
                             await ws.send(json.dumps({"type":"desktop","id":cfg.get("id"),"result":result}))
                             continue
-                        if not desktop_budget.take():
+                        action = command.get('action') if isinstance(command,dict) else None
+                        if action == 'preview' and not preview_budget.take():
+                            raise RuntimeError('Previews are loading too quickly. Try again.')
+                        if action != 'preview' and not desktop_budget.take():
                             raise RuntimeError("Wait before requesting more previews")
-                        if command.get('action') == 'list':
-                            if preview_task and not preview_task.done():
-                                raise RuntimeError('Window previews are still loading')
-                            async def send_previews(request_id):
-                                try:
-                                    result = await desktop_control({'action':'list'})
-                                    if AUTH.valid(*ws.phonemic_auth):
-                                        await ws.send(json.dumps({'type':'desktop','id':request_id,'result':result}))
-                                except Exception:
-                                    if AUTH.valid(*ws.phonemic_auth):
-                                        await ws.send(json.dumps({'type':'desktop','id':request_id,'error':'Window previews unavailable'}))
-                            preview_task = asyncio.create_task(send_previews(cfg.get('id')))
+                        if action in ('list','preview'):
+                            if len(desktop_tasks) >= 2:
+                                raise RuntimeError('Applications are still loading. Try again.')
+                            remember_desktop_task(asyncio.create_task(send_desktop_result(cfg.get('id'), command)))
                             continue
                         result = await desktop_control(cfg["desktop"])
                         if AUTH.valid(*ws.phonemic_auth):
@@ -2583,9 +2709,10 @@ async def handle_authenticated(ws):
         task.cancel()
         herdr_task.cancel()
         desktop_task.cancel()
-        if preview_task:
-            preview_task.cancel()
-            await asyncio.gather(preview_task,return_exceptions=True)
+        for task in list(desktop_tasks):
+            task.cancel()
+        if desktop_tasks:
+            await asyncio.gather(*desktop_tasks,return_exceptions=True)
         guard.cancel()
         await asyncio.gather(task, herdr_task, desktop_task, guard, return_exceptions=True)
         await dictation.close()
